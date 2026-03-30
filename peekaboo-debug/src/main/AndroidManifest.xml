@@ -1,0 +1,9 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET" />
+    <application>
+        <provider
+            android:name=".PeekabooInitializer"
+            android:authorities="${applicationId}.peekaboo-debug-init"
+            android:exported="false" />
+    </application>
+</manifest>
