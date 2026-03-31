@@ -1,6 +1,5 @@
-package com.peekaboo.debug
+package com.peekaboo.core
 
-import com.peekaboo.core.CapturedRequest
 import java.util.concurrent.CopyOnWriteArrayList
 
 object NetworkStore {

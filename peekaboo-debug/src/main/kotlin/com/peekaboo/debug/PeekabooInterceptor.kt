@@ -1,6 +1,7 @@
 package com.peekaboo.debug
 
 import com.peekaboo.core.CapturedRequest
+import com.peekaboo.core.NetworkStore
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.ResponseBody.Companion.toResponseBody

@@ -1,10 +1,799 @@
 <!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><title>Network Inspector</title></head>
-<body>
-  <h1>Network Inspector</h1>
-  <p>Web UI will be added in Phase 6.</p>
-  <p><a href="/api/calls">View raw API: /api/calls</a></p>
-  <p><a href="/api/mocks">View raw API: /api/mocks</a></p>
+<html class="dark" lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>NET_INSPECTOR_V1</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<script>
+tailwind.config = {
+  darkMode: "class",
+  theme: {
+    extend: {
+      colors: {
+        "error-container": "#93000a",
+        "on-error": "#690005",
+        "secondary-container": "#344970",
+        "surface-container-lowest": "#0c0e14",
+        "surface-tint": "#acc7ff",
+        "on-background": "#e2e2eb",
+        "on-primary": "#002f68",
+        "tertiary": "#ffb873",
+        "surface-container-high": "#282a30",
+        "primary": "#acc7ff",
+        "surface-bright": "#373940",
+        "surface": "#111319",
+        "on-primary-container": "#00285b",
+        "secondary": "#b2c7f5",
+        "surface-container-highest": "#33343b",
+        "on-surface-variant": "#c2c6d5",
+        "error": "#ffb4ab",
+        "primary-container": "#508ff8",
+        "outline": "#8c909e",
+        "primary-fixed-dim": "#acc7ff",
+        "outline-variant": "#424753",
+        "surface-container": "#1e1f26",
+        "on-surface": "#e2e2eb",
+        "surface-variant": "#33343b",
+        "background": "#111319",
+        "on-secondary-container": "#a4b8e6",
+        "surface-container-low": "#191b22",
+        "on-error-container": "#ffdad6"
+      },
+      fontFamily: {
+        "headline": ["Space Grotesk", "sans-serif"],
+        "body": ["Inter", "sans-serif"],
+        "label": ["Space Grotesk", "sans-serif"],
+        "mono": ["JetBrains Mono", "monospace"]
+      },
+      borderRadius: { "DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem" },
+    }
+  }
+}
+</script>
+<style>
+  .material-symbols-outlined { font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24; line-height:1; display:inline-block; vertical-align:middle; }
+  ::-webkit-scrollbar { width:4px; height:4px; }
+  ::-webkit-scrollbar-track { background:#0c0e14; }
+  ::-webkit-scrollbar-thumb { background:#282a30; border-radius:2px; }
+  ::-webkit-scrollbar-thumb:hover { background:#424753; }
+  .glass { background-color:rgba(55,57,64,0.88); backdrop-filter:blur(20px); }
+  .tab-active { color:#acc7ff; border-bottom-color:#4f8ef7; }
+  .tab-inactive { color:#8c909e; border-bottom-color:transparent; }
+  .tab-inactive:hover { color:#c2c6d5; }
+  .json-key { color:#b2c7f5; }
+  .json-str { color:#ffb873; }
+  .json-num { color:#acc7ff; }
+  .json-bool { color:#86efac; }
+  .json-null { color:#8c909e; }
+  .json-punct { color:#c2c6d5; }
+  @keyframes fadein { from { opacity:0; transform:scale(0.97); } to { opacity:1; transform:scale(1); } }
+  .anim-in { animation:fadein 0.15s ease-out; }
+  input[type=range] { -webkit-appearance:none; appearance:none; height:4px; background:#282a30; border-radius:2px; outline:none; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:14px; height:14px; border-radius:50%; background:#acc7ff; cursor:pointer; }
+  select option { background:#1e1f26; }
+</style>
+</head>
+<body class="bg-background text-on-background font-body overflow-hidden" style="height:100vh;">
+
+<!-- ── TOP NAV ─────────────────────────────────────────────── -->
+<header class="fixed top-0 left-0 right-0 h-14 z-50 flex items-center justify-between px-6 bg-surface border-b border-surface-container-high">
+  <div class="flex items-center gap-8">
+    <span class="font-headline text-lg font-bold tracking-widest text-primary uppercase select-none">NET_INSPECTOR_V1</span>
+    <nav class="hidden md:flex items-center h-14 gap-0">
+      <button id="tnav-traffic"   onclick="setTab('traffic')"   class="font-label text-[13px] uppercase tracking-tight h-full px-4 border-b-2 transition-colors">Traffic</button>
+      <button id="tnav-rules"     onclick="setTab('rules')"     class="font-label text-[13px] uppercase tracking-tight h-full px-4 border-b-2 transition-colors">Rewrites</button>
+      <button id="tnav-snapshots" onclick="setTab('snapshots')" class="font-label text-[13px] uppercase tracking-tight h-full px-4 border-b-2 transition-colors">Snapshots</button>
+    </nav>
+  </div>
+  <div class="flex items-center gap-3">
+    <button onclick="clearRequests()" class="px-3 py-1.5 text-xs font-bold uppercase tracking-wider bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest transition-all active:scale-95 font-label rounded-sm">Clear All</button>
+    <button onclick="openCreateModal()" class="px-3 py-1.5 text-xs font-bold uppercase tracking-wider bg-primary-container text-on-primary-container hover:opacity-90 transition-all active:scale-95 font-label rounded-sm">Create Mock</button>
+    <div class="flex items-center gap-0.5 ml-2 pl-3 border-l border-surface-container-high text-outline">
+      <button class="material-symbols-outlined p-1.5 hover:text-primary hover:bg-surface-container rounded transition-all" title="Filter">filter_alt</button>
+      <button onclick="clearRequests()" class="material-symbols-outlined p-1.5 hover:text-primary hover:bg-surface-container rounded transition-all" title="Clear All">delete_sweep</button>
+      <button class="material-symbols-outlined p-1.5 hover:text-primary hover:bg-surface-container rounded transition-all" title="Settings">settings</button>
+    </div>
+  </div>
+</header>
+
+<!-- ── SIDE NAV ────────────────────────────────────────────── -->
+<aside class="fixed left-0 top-14 w-20 z-40 flex flex-col bg-surface-container-low border-r border-surface-container-high" style="height:calc(100vh - 3.5rem);">
+  <div class="flex flex-col items-center pt-4 pb-2 gap-0.5 flex-1">
+    <div class="flex flex-col items-center gap-0.5 mb-5">
+      <div class="w-8 h-8 rounded-lg bg-surface-container-high flex items-center justify-center text-primary">
+        <span class="material-symbols-outlined text-base" style="font-variation-settings:'FILL' 1,'wght' 400,'GRAD' 0,'opsz' 24;">terminal</span>
+      </div>
+      <span class="font-label text-[9px] font-black text-primary tracking-wider">v1.0.0</span>
+    </div>
+    <button id="snav-traffic"   onclick="setTab('traffic')"   class="snav-btn w-full flex flex-col items-center gap-1 py-2.5 transition-all cursor-pointer">
+      <span class="material-symbols-outlined">swap_vert</span>
+      <span class="font-label text-[10px] font-bold uppercase tracking-wider">Requests</span>
+    </button>
+    <button id="snav-rules"     onclick="setTab('rules')"     class="snav-btn w-full flex flex-col items-center gap-1 py-2.5 transition-all cursor-pointer">
+      <span class="material-symbols-outlined">terminal</span>
+      <span class="font-label text-[10px] font-bold uppercase tracking-wider">Rules</span>
+    </button>
+    <button class="snav-btn w-full flex flex-col items-center gap-1 py-2.5 text-outline hover:bg-surface-container-high hover:text-on-surface-variant transition-all cursor-pointer">
+      <span class="material-symbols-outlined">router</span>
+      <span class="font-label text-[10px] font-bold uppercase tracking-wider">Proxies</span>
+    </button>
+    <button class="snav-btn w-full flex flex-col items-center gap-1 py-2.5 text-outline hover:bg-surface-container-high hover:text-on-surface-variant transition-all cursor-pointer">
+      <span class="material-symbols-outlined">list_alt</span>
+      <span class="font-label text-[10px] font-bold uppercase tracking-wider">Logs</span>
+    </button>
+  </div>
+  <div class="border-t border-surface-container-high py-3 flex flex-col items-center gap-2">
+    <button class="flex flex-col items-center gap-1 text-outline hover:text-on-surface-variant transition-colors">
+      <span class="material-symbols-outlined text-xl">help_outline</span>
+      <span class="font-label text-[9px] font-bold uppercase tracking-wider">Docs</span>
+    </button>
+  </div>
+</aside>
+
+<!-- ── MAIN ────────────────────────────────────────────────── -->
+<main class="flex flex-col" style="margin-left:5rem; padding-top:3.5rem; height:100vh;">
+
+  <!-- ── TRAFFIC VIEW ──────────────────────────────────────── -->
+  <div id="view-traffic" class="flex flex-1 overflow-hidden">
+
+    <!-- Left: Request List -->
+    <section class="flex flex-col border-r border-surface-container-high bg-surface" style="width:18rem;flex-shrink:0;">
+      <div class="flex-shrink-0 h-10 flex items-center justify-between px-4 border-b border-surface-container-high bg-surface-container-low">
+        <span id="req-count" class="font-mono text-[10px] uppercase tracking-widest text-outline font-bold">Live Stream — 0 Requests</span>
+        <button onclick="clearRequests()" class="material-symbols-outlined text-sm text-outline hover:text-error transition-colors" title="Clear">delete_sweep</button>
+      </div>
+      <div class="flex-shrink-0 px-3 py-2 border-b border-surface-container-high bg-surface-container-low">
+        <input id="filter-input" type="text" placeholder="Filter URL…" oninput="filterRequests(this.value)"
+          class="w-full bg-transparent text-xs font-mono text-on-surface border-b border-outline-variant focus:border-primary focus:outline-none py-1 placeholder:text-outline transition-colors"/>
+      </div>
+      <div id="request-list" class="flex-1 overflow-y-auto"></div>
+    </section>
+
+    <!-- Right: Detail Panel -->
+    <section class="flex flex-col flex-1 overflow-hidden bg-surface-container-lowest">
+      <div class="flex-shrink-0 h-10 flex items-center px-6 gap-6 border-b border-surface-container-high bg-surface-container-low">
+        <button id="dtab-request"  onclick="setDetailTab('request')"  class="font-label text-[11px] font-bold uppercase tracking-wider h-full border-b-2 transition-colors">Request</button>
+        <button id="dtab-response" onclick="setDetailTab('response')" class="font-label text-[11px] font-bold uppercase tracking-wider h-full border-b-2 transition-colors">Response</button>
+        <button id="dtab-headers"  onclick="setDetailTab('headers')"  class="font-label text-[11px] font-bold uppercase tracking-wider h-full border-b-2 transition-colors">Headers</button>
+      </div>
+      <div id="detail-content" class="flex-1 overflow-y-auto p-6"></div>
+      <div class="flex-shrink-0 h-16 flex items-center justify-between px-6 border-t border-surface-container-high bg-surface-container-low">
+        <div class="flex gap-2">
+          <button onclick="createMockFromRequest()" class="flex items-center gap-2 px-4 py-2 bg-primary text-on-primary text-xs font-bold uppercase tracking-wider font-label hover:opacity-90 active:scale-95 transition-all rounded-sm">
+            <span class="material-symbols-outlined text-sm">magic_button</span>Create Mock from Request
+          </button>
+          <button onclick="copyAsCurl()" class="flex items-center gap-2 px-4 py-2 border border-surface-container-high text-on-surface-variant text-xs font-bold uppercase tracking-wider font-label hover:bg-surface-container-high active:scale-95 transition-all rounded-sm">
+            <span class="material-symbols-outlined text-sm">content_copy</span>Copy as cURL
+          </button>
+        </div>
+        <div class="flex items-center gap-1 text-outline">
+          <button class="material-symbols-outlined p-1.5 hover:text-primary transition-colors rounded" title="Share">share</button>
+          <button onclick="replayRequest()" class="material-symbols-outlined p-1.5 hover:text-primary transition-colors rounded" title="Replay">replay</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- ── RULES VIEW ────────────────────────────────────────── -->
+  <div id="view-rules" class="flex-1 overflow-y-auto bg-surface-container-lowest hidden">
+    <div class="p-8" style="max-width:72rem;margin:0 auto;">
+      <div class="flex justify-between items-end mb-8">
+        <div>
+          <h1 class="font-headline text-3xl font-bold tracking-tight text-on-background">Mock Rules</h1>
+          <p class="text-sm text-outline font-body mt-1">Intercept and rewrite traffic based on matching patterns.</p>
+        </div>
+        <div class="flex gap-3 items-center">
+          <span id="rules-count" class="text-[11px] font-mono text-outline uppercase tracking-widest bg-surface-container px-3 py-1 rounded-sm border border-outline-variant/20">0 Rules Active</span>
+          <button onclick="openCreateModal()" class="flex items-center gap-2 px-4 py-2 text-xs font-bold uppercase tracking-wider bg-primary-container text-on-primary-container hover:opacity-90 active:scale-95 transition-all font-label rounded-sm">
+            <span class="material-symbols-outlined text-sm">add</span>Create Rule
+          </button>
+        </div>
+      </div>
+      <div class="bg-surface border border-outline-variant/10 rounded-sm overflow-hidden">
+        <div class="grid gap-4 px-6 py-3 bg-surface-container-low border-b border-outline-variant/20 text-[10px] font-bold uppercase tracking-widest text-outline" style="grid-template-columns:2rem 5rem 1fr 3.5rem 4.5rem 6rem;">
+          <div></div><div>Method</div><div>URL Pattern</div><div class="text-center">Code</div><div class="text-center">Delay</div><div class="text-right">Actions</div>
+        </div>
+        <div id="rules-list" class="divide-y divide-outline-variant/10"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SNAPSHOTS VIEW ────────────────────────────────────── -->
+  <div id="view-snapshots" class="flex-1 overflow-y-auto bg-surface-container-lowest hidden">
+    <div class="flex flex-col items-center justify-center h-full text-outline">
+      <span class="material-symbols-outlined text-5xl mb-3 opacity-20">photo_camera</span>
+      <p class="text-[11px] font-label uppercase tracking-widest opacity-20">Snapshots coming soon</p>
+    </div>
+  </div>
+</main>
+
+<!-- ── MOCK MODAL ──────────────────────────────────────────── -->
+<div id="modal" class="hidden fixed inset-0 z-[100] flex items-center justify-center p-4 bg-surface-container-lowest/80 backdrop-blur-sm">
+  <div class="w-full glass border border-primary/20 rounded-xl shadow-2xl overflow-hidden anim-in" style="max-width:40rem;">
+    <div class="px-6 py-4 bg-surface-container flex justify-between items-center border-b border-outline-variant/30">
+      <div class="flex items-center gap-2">
+        <span id="modal-icon" class="material-symbols-outlined text-primary">add_box</span>
+        <h2 id="modal-title" class="font-headline font-bold uppercase tracking-wider text-on-surface">Create Mock Rule</h2>
+      </div>
+      <button onclick="closeModal()" class="material-symbols-outlined text-outline hover:text-on-surface transition-colors">close</button>
+    </div>
+    <form onsubmit="saveMock(event)" class="p-6 space-y-6">
+      <div class="grid grid-cols-3 gap-6">
+        <div class="col-span-2 space-y-1.5">
+          <label class="font-label text-[10px] font-bold uppercase tracking-widest text-primary block">URL Pattern (Regex)</label>
+          <input id="f-pattern" type="text" required placeholder="^/api/v1/…"
+            class="w-full bg-transparent border-b-2 border-outline-variant focus:border-primary text-sm font-mono py-2 transition-all placeholder:text-outline outline-none text-on-surface"/>
+        </div>
+        <div class="space-y-1.5">
+          <label class="font-label text-[10px] font-bold uppercase tracking-widest text-primary block">Method</label>
+          <select id="f-method" class="w-full bg-transparent border-b-2 border-outline-variant focus:border-primary text-sm py-2 transition-all appearance-none outline-none text-on-surface cursor-pointer">
+            <option>GET</option><option>POST</option><option>PUT</option><option>PATCH</option><option>DELETE</option>
+          </select>
+        </div>
+      </div>
+      <div class="grid grid-cols-3 gap-6">
+        <div class="space-y-1.5">
+          <label class="font-label text-[10px] font-bold uppercase tracking-widest text-primary block">Status Code</label>
+          <input id="f-code" type="number" value="200" min="100" max="599"
+            class="w-full bg-transparent border-b-2 border-outline-variant focus:border-primary text-sm font-mono py-2 transition-all outline-none text-on-surface"/>
+          <div class="flex flex-wrap gap-1.5 pt-1">
+            <button type="button" onclick="document.getElementById('f-code').value=200" class="text-[9px] px-1.5 py-0.5 rounded-sm bg-surface-container-highest text-outline hover:text-primary border border-transparent hover:border-primary/40 transition-all font-mono">200</button>
+            <button type="button" onclick="document.getElementById('f-code').value=201" class="text-[9px] px-1.5 py-0.5 rounded-sm bg-surface-container-highest text-outline hover:text-primary border border-transparent hover:border-primary/40 transition-all font-mono">201</button>
+            <button type="button" onclick="document.getElementById('f-code').value=400" class="text-[9px] px-1.5 py-0.5 rounded-sm bg-surface-container-highest text-outline hover:text-primary border border-transparent hover:border-primary/40 transition-all font-mono">400</button>
+            <button type="button" onclick="document.getElementById('f-code').value=401" class="text-[9px] px-1.5 py-0.5 rounded-sm bg-surface-container-highest text-outline hover:text-primary border border-transparent hover:border-primary/40 transition-all font-mono">401</button>
+            <button type="button" onclick="document.getElementById('f-code').value=404" class="text-[9px] px-1.5 py-0.5 rounded-sm bg-surface-container-highest text-outline hover:text-primary border border-transparent hover:border-primary/40 transition-all font-mono">404</button>
+            <button type="button" onclick="document.getElementById('f-code').value=500" class="text-[9px] px-1.5 py-0.5 rounded-sm bg-surface-container-highest text-outline hover:text-primary border border-transparent hover:border-primary/40 transition-all font-mono">500</button>
+          </div>
+        </div>
+        <div class="col-span-2 space-y-1.5">
+          <div class="flex justify-between items-center">
+            <label class="font-label text-[10px] font-bold uppercase tracking-widest text-primary">Network Delay (ms)</label>
+            <span id="delay-val" class="font-mono text-[11px] text-secondary">0ms</span>
+          </div>
+          <input id="f-delay" type="range" min="0" max="3000" step="50" value="0"
+            oninput="document.getElementById('delay-val').textContent=this.value+'ms'"
+            class="w-full mt-1"/>
+          <div class="flex justify-between text-[8px] font-mono text-outline-variant"><span>0ms</span><span>3000ms</span></div>
+        </div>
+      </div>
+      <div class="space-y-1.5">
+        <label class="font-label text-[10px] font-bold uppercase tracking-widest text-primary block">Response Body (JSON)</label>
+        <div class="bg-surface-container-lowest rounded-sm border border-outline-variant/30 overflow-hidden">
+          <div class="flex items-center gap-2 px-3 py-1.5 bg-surface-container-high border-b border-outline-variant/20">
+            <span class="w-2 h-2 rounded-full bg-error flex-shrink-0"></span>
+            <span class="w-2 h-2 rounded-full bg-tertiary flex-shrink-0"></span>
+            <span class="w-2 h-2 rounded-full bg-green-500 flex-shrink-0"></span>
+            <span class="text-[9px] uppercase tracking-tighter text-outline font-mono ml-1">Payload Editor</span>
+            <button type="button" onclick="formatModalJson()" class="ml-auto text-[9px] font-mono text-outline hover:text-primary transition-colors">Format</button>
+          </div>
+          <textarea id="f-body" rows="6" placeholder='{&#10;  "status": "success",&#10;  "data": {}&#10;}'
+            class="w-full bg-transparent border-none p-4 text-secondary font-mono text-xs leading-relaxed resize-none outline-none"></textarea>
+        </div>
+      </div>
+      <div class="space-y-1.5">
+        <label class="font-label text-[10px] font-bold uppercase tracking-widest text-primary block">Optional Description</label>
+        <input id="f-desc" type="text" placeholder="e.g. Test unauthorized login flow"
+          class="w-full bg-transparent border-b-2 border-outline-variant focus:border-primary text-sm py-2 transition-all placeholder:text-outline outline-none text-on-surface"/>
+      </div>
+      <input type="hidden" id="f-id"/>
+      <div class="flex justify-end gap-3 pt-4 border-t border-outline-variant/20">
+        <button type="button" onclick="closeModal()" class="px-5 py-2 text-[11px] font-bold uppercase tracking-widest text-outline hover:text-on-surface transition-colors font-label">Cancel</button>
+        <button type="submit" class="px-8 py-2 text-[11px] font-bold uppercase tracking-widest bg-primary text-on-primary hover:opacity-90 active:scale-95 transition-all rounded-sm font-label">Save Rule</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ── STATUS OVERLAY ──────────────────────────────────────── -->
+<div class="fixed bottom-4 right-4 z-50 pointer-events-none" style="background:rgba(17,19,25,0.82);backdrop-filter:blur(12px);border:1px solid rgba(172,199,255,0.2);padding:0.5rem 0.75rem;border-radius:0.125rem;" class="flex items-center gap-3">
+  <div class="flex items-center gap-3">
+    <div id="status-dot" class="w-2 h-2 rounded-full bg-green-500" style="animation:pulse 2s infinite;"></div>
+    <div class="flex flex-col">
+      <span id="status-label" class="font-label text-[9px] font-bold uppercase tracking-wider text-primary">Connecting…</span>
+      <span id="status-port"  class="font-mono text-[8px] text-outline">127.0.0.1:8090</span>
+    </div>
+  </div>
+</div>
+<style>@keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.4;}}</style>
+
+<!-- ── TOAST ───────────────────────────────────────────────── -->
+<div id="toast" class="hidden fixed bottom-20 right-4 z-[200] pointer-events-none bg-surface-container border border-outline-variant/30 text-on-surface text-xs font-mono px-4 py-2 rounded-sm anim-in"></div>
+
+<script>
+// ══════════════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════════════
+const S = {
+  tab: 'traffic',
+  dtab: 'request',
+  requests: [],
+  filtered: [],
+  selected: null,
+  mocks: [],
+  filter: '',
+  editId: null,
+  ws: null,
+};
+
+// ══════════════════════════════════════════════════
+// UTILS
+// ══════════════════════════════════════════════════
+const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+function tsFormat(ms) {
+  const d = new Date(ms);
+  const hms = d.toTimeString().slice(0,8);
+  return hms + '.' + String(d.getMilliseconds()).padStart(3,'0');
+}
+function dtFormat(ms) {
+  return new Date(ms).toISOString().replace('T',' ').slice(0,23);
+}
+function durStr(ms) { return ms < 1000 ? ms+'ms' : (ms/1000).toFixed(2)+'s'; }
+function sizeStr(s) {
+  if (!s) return '0 B';
+  const b = new Blob([s]).size;
+  return b < 1024 ? b+' B' : b < 1048576 ? (b/1024).toFixed(1)+' KB' : (b/1048576).toFixed(1)+' MB';
+}
+
+function scColor(c) {
+  if (!c && c !== 0) return 'text-outline';
+  if (c >= 500) return 'text-orange-400';
+  if (c >= 400) return 'text-error';
+  if (c >= 300) return 'text-yellow-400';
+  return 'text-green-400';
+}
+const SC_TEXT = {200:'OK',201:'Created',204:'No Content',301:'Moved',304:'Not Modified',400:'Bad Request',401:'Unauthorized',403:'Forbidden',404:'Not Found',422:'Unprocessable',500:'Server Error',502:'Bad Gateway',503:'Unavailable'};
+function scText(c) { return SC_TEXT[c] || String(c); }
+
+function methodBadge(m) {
+  const map = {
+    GET:    'bg-[#acc7ff]/15 text-[#acc7ff] border border-[#acc7ff]/25',
+    POST:   'bg-[#33343b] text-green-400 border border-green-400/25',
+    PUT:    'bg-[#33343b] text-yellow-400 border border-yellow-400/25',
+    PATCH:  'bg-[#33343b] text-[#b2c7f5] border border-[#b2c7f5]/25',
+    DELETE: 'bg-[#93000a]/20 text-[#ffb4ab] border border-[#ffb4ab]/25',
+  };
+  const cls = map[(m||'').toUpperCase()] || 'bg-[#33343b] text-[#8c909e] border border-[#8c909e]/25';
+  return `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase font-mono ${cls}">${esc(m||'?')}</span>`;
+}
+
+function urlPath(url) {
+  try { const u = new URL(url); return u.pathname + u.search; } catch { return url; }
+}
+
+function highlight(raw) {
+  let str;
+  try { str = JSON.stringify(JSON.parse(raw), null, 2); }
+  catch { return `<span class="text-on-surface-variant">${esc(raw)}</span>`; }
+  return esc(str).replace(/(&quot;(?:[^&]|&amp;|&lt;|&gt;)*&quot;(?:\s*:)?|true|false|null|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, tok => {
+    if (tok.startsWith('&quot;')) {
+      return tok.endsWith(':') ? `<span class="json-key">${tok}</span>` : `<span class="json-str">${tok}</span>`;
+    }
+    if (tok==='true'||tok==='false') return `<span class="json-bool">${tok}</span>`;
+    if (tok==='null') return `<span class="json-null">${tok}</span>`;
+    return `<span class="json-num">${tok}</span>`;
+  });
+}
+
+// ══════════════════════════════════════════════════
+// API
+// ══════════════════════════════════════════════════
+async function req(path, opts={}) {
+  const r = await fetch('/api'+path, { headers:{'Content-Type':'application/json'}, ...opts });
+  if (!r.ok && r.status!==204) throw new Error(r.status);
+  if (r.status===204) return null;
+  return r.json().catch(()=>null);
+}
+const api = {
+  calls: ()        => req('/calls'),
+  clearCalls: ()   => req('/calls', {method:'DELETE'}),
+  mocks: ()        => req('/mocks'),
+  createMock: d    => req('/mocks', {method:'POST', body:JSON.stringify(d)}),
+  updateMock: (id,d)=>req(`/mocks/${id}`, {method:'PUT', body:JSON.stringify(d)}),
+  deleteMock: id   => req(`/mocks/${id}`, {method:'DELETE'}),
+  toggleMock: id   => req(`/mocks/${id}/toggle`, {method:'PATCH'}),
+  status: ()       => req('/status'),
+};
+
+// ══════════════════════════════════════════════════
+// WEBSOCKET
+// ══════════════════════════════════════════════════
+function connectWS() {
+  const proto = location.protocol==='https:'?'wss:':'ws:';
+  const ws = new WebSocket(`${proto}//${location.host}/ws`);
+  ws.onopen = () => setStatus(true);
+  ws.onmessage = e => {
+    try {
+      const r = JSON.parse(e.data);
+      S.requests.unshift(r);
+      applyFilter();
+      renderList();
+    } catch {}
+  };
+  ws.onclose = () => { setStatus(false); setTimeout(connectWS, 3000); };
+  ws.onerror = () => ws.close();
+  S.ws = ws;
+}
+
+function setStatus(ok) {
+  document.getElementById('status-dot').style.background = ok ? '#4ade80' : '#ffb4ab';
+  document.getElementById('status-label').textContent = ok ? 'Proxy Active' : 'Reconnecting…';
+}
+
+// ══════════════════════════════════════════════════
+// TAB NAVIGATION
+// ══════════════════════════════════════════════════
+function setTab(tab) {
+  S.tab = tab;
+  ['traffic','rules','snapshots'].forEach(t => {
+    const v = document.getElementById(`view-${t}`);
+    const tn = document.getElementById(`tnav-${t}`);
+    const sn = document.getElementById(`snav-${t}`);
+    if (v) v.classList.toggle('hidden', t!==tab);
+    if (tn) { tn.className = tn.className.replace(/tab-active|tab-inactive/g,'').trim() + (t===tab?' tab-active':' tab-inactive'); }
+    if (sn) {
+      sn.className = t===tab
+        ? 'snav-btn w-full flex flex-col items-center gap-1 py-2.5 bg-surface-container-high text-primary border-r-2 border-[#4f8ef7] cursor-pointer'
+        : 'snav-btn w-full flex flex-col items-center gap-1 py-2.5 text-outline hover:bg-surface-container-high hover:text-on-surface-variant transition-all cursor-pointer';
+    }
+  });
+}
+
+function setDetailTab(tab) {
+  S.dtab = tab;
+  ['request','response','headers'].forEach(t => {
+    const b = document.getElementById(`dtab-${t}`);
+    if (!b) return;
+    b.className = b.className.replace(/tab-active|tab-inactive/g,'').trim() + (t===tab?' tab-active':' tab-inactive');
+  });
+  renderDetail();
+}
+
+// ══════════════════════════════════════════════════
+// FILTER
+// ══════════════════════════════════════════════════
+function applyFilter() {
+  const q = S.filter.toLowerCase();
+  S.filtered = q ? S.requests.filter(r => (r.url||'').toLowerCase().includes(q) || (r.method||'').toLowerCase().includes(q)) : [...S.requests];
+}
+function filterRequests(v) { S.filter = v; applyFilter(); renderList(); }
+
+// ══════════════════════════════════════════════════
+// RENDER: REQUEST LIST
+// ══════════════════════════════════════════════════
+function renderList() {
+  document.getElementById('req-count').textContent = `Live Stream — ${S.requests.length} Request${S.requests.length!==1?'s':''}`;
+  const el = document.getElementById('request-list');
+  if (!S.filtered.length) {
+    el.innerHTML = `<div class="flex flex-col items-center justify-center py-16 text-outline">
+      <span class="material-symbols-outlined text-3xl mb-2 opacity-25">swap_vert</span>
+      <p class="text-[11px] font-label uppercase tracking-widest opacity-25">${S.requests.length?'No matches':'Waiting for requests…'}</p></div>`;
+    return;
+  }
+  el.innerHTML = S.filtered.map(r => {
+    const active = S.selected?.id===r.id;
+    const path = urlPath(r.url);
+    const sc = r.responseCode;
+    const mockBadge = r.isMocked ? '<span class="px-1.5 py-0.5 rounded-sm text-[9px] font-black bg-[#6b42f5] text-white leading-none">MOCK</span>' : '';
+    const errBadge  = r.error    ? '<span class="px-1.5 py-0.5 rounded-sm text-[9px] font-black bg-error-container text-error leading-none">ERR</span>' : '';
+    return `<div onclick="selectReq('${r.id}')" class="p-3 border-b border-surface-container-high cursor-pointer transition-colors border-l-2 ${active?'bg-surface-container-low border-l-[#4f8ef7]':'hover:bg-surface-container-low border-l-transparent'}">
+      <div class="flex items-center justify-between mb-1">
+        <div class="flex items-center gap-1.5">${methodBadge(r.method)}${mockBadge}${errBadge}</div>
+        <span class="font-mono text-[10px] font-bold ${scColor(sc)}">${sc?sc+' '+scText(sc):r.error?'ERROR':'…'}</span>
+      </div>
+      <div class="font-mono text-xs truncate ${active?'text-primary':'text-on-surface-variant'}" title="${esc(r.url)}">${esc(path)}</div>
+      <div class="flex justify-between mt-1.5 text-[10px] text-outline font-mono">
+        <span>${tsFormat(r.timestamp)}</span><span>${durStr(r.durationMs)}</span>
+      </div></div>`;
+  }).join('');
+}
+
+// ══════════════════════════════════════════════════
+// RENDER: DETAIL
+// ══════════════════════════════════════════════════
+function selectReq(id) {
+  S.selected = S.requests.find(r=>r.id===id)||null;
+  renderList();
+  renderDetail();
+}
+
+function renderDetail() {
+  const el = document.getElementById('detail-content');
+  const r = S.selected;
+  if (!r) {
+    el.innerHTML = `<div class="flex flex-col items-center justify-center h-full text-outline">
+      <span class="material-symbols-outlined text-5xl mb-3 opacity-20">article</span>
+      <p class="text-[11px] font-label uppercase tracking-widest opacity-20">Select a request to inspect</p></div>`;
+    return;
+  }
+  const sc = r.responseCode;
+  const summary = `<div class="bg-surface-container p-4 rounded-sm border border-outline-variant/10 mb-5">
+    <div class="flex items-center gap-3 mb-3 flex-wrap gap-y-1.5">
+      ${methodBadge(r.method)}
+      ${r.isMocked?'<span class="px-1.5 py-0.5 rounded-sm text-[9px] font-black bg-[#6b42f5] text-white">MOCK</span>':''}
+      <code class="text-primary font-mono text-xs break-all select-all flex-1 min-w-0">${esc(r.url)}</code>
+    </div>
+    <div class="grid grid-cols-4 gap-4 border-t border-surface-container-high pt-3 mt-1">
+      ${metaCell('Status', `<span class="font-mono text-xs font-bold ${scColor(sc)}">${sc?sc+' '+scText(sc):r.error||'Pending'}</span>`)}
+      ${metaCell('Timestamp', `<span class="font-mono text-xs text-on-surface-variant">${dtFormat(r.timestamp)}</span>`)}
+      ${metaCell('Duration',  `<span class="font-mono text-xs text-on-surface-variant">${durStr(r.durationMs)}</span>`)}
+      ${metaCell('Req Size',  `<span class="font-mono text-xs text-on-surface-variant">${sizeStr(r.requestBody)}</span>`)}
+    </div></div>`;
+
+  let body = '';
+  if (S.dtab==='request') {
+    body = summary + headersBlock('Request Headers', r.requestHeaders) + bodyBlock('req');
+  } else if (S.dtab==='response') {
+    body = summary + headersBlock('Response Headers', r.responseHeaders) + bodyBlock('res', r.bodyTruncated);
+  } else {
+    body = summary + headersBlock('Request Headers', r.requestHeaders) + headersBlock('Response Headers', r.responseHeaders);
+  }
+  el.innerHTML = body;
+}
+
+function metaCell(label, valHtml) {
+  return `<div class="flex flex-col gap-0.5"><span class="font-label text-[9px] uppercase tracking-widest text-outline font-bold">${label}</span>${valHtml}</div>`;
+}
+
+function headersBlock(title, hdrs) {
+  const entries = hdrs ? Object.entries(hdrs) : [];
+  const rows = entries.length
+    ? entries.map(([k,v])=>`<tr class="border-b border-surface-container-high last:border-0"><td class="py-1.5 px-3 text-outline font-mono text-[11px] w-2/5 align-top">${esc(k)}</td><td class="py-1.5 px-3 text-primary font-mono text-[11px] break-all">${esc(v)}</td></tr>`).join('')
+    : `<tr><td colspan="2" class="px-3 py-3 text-outline text-[11px] font-mono">No headers captured.</td></tr>`;
+  return `<div class="mb-5"><div class="flex items-center gap-2 mb-2">
+    <span class="material-symbols-outlined text-sm text-outline">list</span>
+    <h3 class="font-label text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">${title}</h3>
+    ${entries.length?`<span class="font-mono text-[9px] text-outline bg-surface-container px-1.5 py-0.5 rounded-sm">${entries.length}</span>`:''}
+  </div>
+  <div class="bg-surface-container-lowest rounded-sm border border-outline-variant/10 overflow-hidden">
+    <table class="w-full text-left"><tbody>${rows}</tbody></table>
+  </div></div>`;
+}
+
+function bodyBlock(which, truncated) {
+  const r = S.selected;
+  const raw = which==='req' ? r?.requestBody : r?.responseBody;
+  if (!raw) return `<div class="mb-5"><div class="flex items-center gap-2 mb-2">
+    <span class="material-symbols-outlined text-sm text-outline">code</span>
+    <h3 class="font-label text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">${which==='req'?'Request Body':'Response Body'}</h3>
+  </div><p class="text-[11px] text-outline font-mono">No body.</p></div>`;
+
+  let isJson = false;
+  try { JSON.parse(raw); isJson = true; } catch {}
+  const formatted = isJson ? JSON.stringify(JSON.parse(raw),null,2) : raw;
+  const lineNums = formatted.split('\n').map((_,i)=>`<div class="leading-5 text-[10px] text-outline select-none">${i+1}</div>`).join('');
+  const trunc = truncated ? `<div class="px-3 py-1.5 bg-[#d37b02]/10 border-t border-outline-variant/20 text-[10px] text-tertiary font-mono">⚠ Body was truncated.</div>` : '';
+
+  return `<div class="mb-5"><div class="flex items-center justify-between mb-2">
+    <div class="flex items-center gap-2">
+      <span class="material-symbols-outlined text-sm text-outline">code</span>
+      <h3 class="font-label text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">${which==='req'?'Request Body':'Response Body'}</h3>
+      <span class="font-mono text-[9px] text-outline bg-surface-container px-1.5 py-0.5 rounded-sm">${isJson?'JSON':'RAW'}</span>
+    </div>
+    <button onclick="copyBody('${which}')" class="flex items-center gap-1 text-[10px] font-mono text-outline hover:text-primary transition-colors">
+      <span class="material-symbols-outlined text-sm">content_copy</span>Copy
+    </button>
+  </div>
+  <div class="bg-surface-container-lowest rounded-sm border border-outline-variant/10 overflow-hidden font-mono text-[12px]">
+    <div class="flex">
+      <div class="flex-shrink-0 flex flex-col items-end px-2.5 py-4 bg-surface-container border-r border-outline-variant/20 min-w-[2.25rem]">${lineNums}</div>
+      <pre class="flex-1 p-4 leading-5 overflow-x-auto whitespace-pre-wrap break-words">${highlight(raw)}</pre>
+    </div>${trunc}
+  </div></div>`;
+}
+
+function copyBody(which) {
+  const r = S.selected;
+  const raw = which==='req' ? r?.requestBody : r?.responseBody;
+  if (raw) navigator.clipboard.writeText(raw).then(()=>toast('Copied to clipboard')).catch(()=>{});
+}
+
+// ══════════════════════════════════════════════════
+// RENDER: RULES
+// ══════════════════════════════════════════════════
+function renderRules() {
+  const active = S.mocks.filter(m=>m.isEnabled).length;
+  document.getElementById('rules-count').textContent = `${active} Rule${active!==1?'s':''} Active`;
+  const el = document.getElementById('rules-list');
+  if (!S.mocks.length) {
+    el.innerHTML = `<div class="flex items-center justify-center py-14 text-outline">
+      <div class="flex flex-col items-center gap-2">
+        <span class="material-symbols-outlined text-3xl opacity-25">terminal</span>
+        <p class="text-[11px] font-label uppercase tracking-widest opacity-25">No mock rules defined</p>
+      </div></div>`;
+    return;
+  }
+  el.innerHTML = S.mocks.map(m => {
+    const sc = m.statusCode;
+    const dim = m.isEnabled ? '' : 'opacity-40';
+    const trackBg = m.isEnabled ? '#508ff8' : '#33343b';
+    const thumbPos = m.isEnabled ? 'left:1rem' : 'left:0.125rem';
+    return `<div class="grid gap-4 px-6 py-4 items-center hover:bg-surface-container-low/40 transition-colors ${dim}" style="grid-template-columns:2rem 5rem 1fr 3.5rem 4.5rem 6rem;">
+      <div>
+        <div onclick="toggleMock('${m.id}')" style="width:2rem;height:1rem;border-radius:0.5rem;background:${trackBg};position:relative;cursor:pointer;transition:background 0.2s;flex-shrink:0;">
+          <div style="position:absolute;top:0.125rem;${thumbPos};width:0.75rem;height:0.75rem;border-radius:50%;background:#fff;transition:left 0.2s;"></div>
+        </div>
+      </div>
+      <div>${methodBadge(m.method)}</div>
+      <div class="font-mono text-sm ${m.isEnabled?'text-secondary':'text-outline italic'} truncate" title="${esc(m.urlPattern)}">${esc(m.urlPattern)}</div>
+      <div class="text-center font-mono text-sm ${scColor(sc)}">${sc}</div>
+      <div class="text-center font-mono text-xs text-outline">${m.delayMs>0?m.delayMs+'ms':'0ms'}</div>
+      <div class="flex items-center justify-end gap-2 text-outline">
+        ${m.description?`<span class="text-[10px] text-outline truncate max-w-[3rem]" title="${esc(m.description)}">${esc(m.description)}</span>`:''}
+        <button onclick="editMock('${m.id}')" class="material-symbols-outlined text-[18px] hover:text-primary transition-colors">edit</button>
+        <button onclick="deleteMock('${m.id}')" class="material-symbols-outlined text-[18px] hover:text-error transition-colors">delete</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ══════════════════════════════════════════════════
+// MODAL
+// ══════════════════════════════════════════════════
+function openCreateModal(pre={}) {
+  S.editId = null;
+  document.getElementById('modal-title').textContent = 'Create Mock Rule';
+  document.getElementById('modal-icon').textContent = 'add_box';
+  document.getElementById('f-id').value      = '';
+  document.getElementById('f-pattern').value = pre.urlPattern || '';
+  document.getElementById('f-method').value  = pre.method || 'GET';
+  document.getElementById('f-code').value    = pre.statusCode || 200;
+  document.getElementById('f-body').value    = pre.responseBody || '';
+  document.getElementById('f-desc').value    = pre.description || '';
+  document.getElementById('f-delay').value   = pre.delayMs || 0;
+  document.getElementById('delay-val').textContent = (pre.delayMs||0)+'ms';
+  document.getElementById('modal').classList.remove('hidden');
+}
+
+function editMock(id) {
+  const m = S.mocks.find(x=>x.id===id);
+  if (!m) return;
+  S.editId = id;
+  document.getElementById('modal-title').textContent = 'Edit Mock Rule';
+  document.getElementById('modal-icon').textContent = 'edit';
+  document.getElementById('f-id').value      = m.id;
+  document.getElementById('f-pattern').value = m.urlPattern;
+  document.getElementById('f-method').value  = m.method;
+  document.getElementById('f-code').value    = m.statusCode;
+  document.getElementById('f-body').value    = m.responseBody;
+  document.getElementById('f-desc').value    = m.description || '';
+  document.getElementById('f-delay').value   = m.delayMs || 0;
+  document.getElementById('delay-val').textContent = (m.delayMs||0)+'ms';
+  document.getElementById('modal').classList.remove('hidden');
+}
+
+function closeModal() {
+  document.getElementById('modal').classList.add('hidden');
+  S.editId = null;
+}
+
+async function saveMock(e) {
+  e.preventDefault();
+  const d = {
+    id: document.getElementById('f-id').value || '',
+    urlPattern:   document.getElementById('f-pattern').value.trim(),
+    method:       document.getElementById('f-method').value,
+    statusCode:   parseInt(document.getElementById('f-code').value)||200,
+    responseBody: document.getElementById('f-body').value,
+    delayMs:      parseInt(document.getElementById('f-delay').value)||0,
+    description:  document.getElementById('f-desc').value.trim(),
+    isEnabled:    true,
+    responseHeaders: {},
+  };
+  if (!d.urlPattern) return;
+  try {
+    if (S.editId) {
+      await api.updateMock(S.editId, d);
+      S.mocks = S.mocks.map(m => m.id===S.editId ? {...d, id:S.editId, isEnabled:m.isEnabled} : m);
+    } else {
+      const created = await api.createMock(d);
+      if (created) S.mocks.push(created);
+      else { const all=await api.mocks(); if(all) S.mocks=all; }
+    }
+    renderRules();
+    closeModal();
+    toast(S.editId?'Rule updated':'Rule created');
+  } catch(err) { console.error(err); toast('Failed to save rule'); }
+}
+
+async function deleteMock(id) {
+  if (!confirm('Delete this mock rule?')) return;
+  try { await api.deleteMock(id); S.mocks=S.mocks.filter(m=>m.id!==id); renderRules(); toast('Rule deleted'); }
+  catch(err) { console.error(err); }
+}
+
+async function toggleMock(id) {
+  try {
+    await api.toggleMock(id);
+    S.mocks = S.mocks.map(m => m.id===id ? {...m, isEnabled:!m.isEnabled} : m);
+    renderRules();
+  } catch(err) { console.error(err); }
+}
+
+function formatModalJson() {
+  const ta = document.getElementById('f-body');
+  try { ta.value = JSON.stringify(JSON.parse(ta.value), null, 2); } catch {}
+}
+
+// ══════════════════════════════════════════════════
+// ACTIONS
+// ══════════════════════════════════════════════════
+async function clearRequests() {
+  if (!confirm('Clear all captured requests?')) return;
+  try {
+    await api.clearCalls();
+    S.requests=[]; S.filtered=[]; S.selected=null;
+    renderList(); renderDetail(); toast('Cleared');
+  } catch(err) { console.error(err); }
+}
+
+function createMockFromRequest() {
+  const r = S.selected;
+  if (!r) return;
+  const path = urlPath(r.url).replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+  openCreateModal({ urlPattern:path, method:r.method, statusCode:r.responseCode||200, responseBody:r.responseBody||'' });
+  setTab('rules');
+}
+
+function copyAsCurl() {
+  const r = S.selected;
+  if (!r) return;
+  const hdrs = Object.entries(r.requestHeaders||{}).map(([k,v])=>`-H '${k}: ${v}'`).join(' ');
+  const body = r.requestBody ? `-d '${r.requestBody.replace(/'/g,"'\\''")}'` : '';
+  const curl = `curl -X ${r.method} '${r.url}' ${hdrs} ${body}`.replace(/\s+/g,' ').trim();
+  navigator.clipboard.writeText(curl).then(()=>toast('cURL copied')).catch(()=>{});
+}
+
+function replayRequest() {
+  const r = S.selected;
+  if (!r) return;
+  fetch(r.url, { method:r.method, headers:r.requestHeaders, body:r.requestBody||undefined }).catch(()=>{});
+  toast('Request replayed');
+}
+
+// ══════════════════════════════════════════════════
+// TOAST
+// ══════════════════════════════════════════════════
+let toastTimer;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.remove('hidden');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>el.classList.add('hidden'), 2000);
+}
+
+// ══════════════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════════════
+async function init() {
+  setTab('traffic');
+  setDetailTab('request');
+  renderList();
+  renderDetail();
+  renderRules();
+
+  try {
+    const [calls, mocks] = await Promise.all([api.calls(), api.mocks()]);
+    S.requests = Array.isArray(calls) ? calls : [];
+    S.mocks    = Array.isArray(mocks) ? mocks : [];
+    applyFilter();
+    renderList();
+    renderRules();
+  } catch(e) { console.warn('Init load failed:', e); }
+
+  connectWS();
+
+  api.status().then(s=>{ if(s?.port) document.getElementById('status-port').textContent=`127.0.0.1:${s.port}`; }).catch(()=>{});
+
+  document.getElementById('modal').addEventListener('click', e=>{ if(e.target===document.getElementById('modal')) closeModal(); });
+  document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeModal(); });
+}
+
+init();
+</script>
 </body>
 </html>
