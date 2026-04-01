@@ -1,14 +1,16 @@
+@file:OptIn(io.ktor.util.InternalAPI::class)
+
 package com.peekaboo.ktor
 
 import com.peekaboo.core.CapturedRequest
 import com.peekaboo.core.NetworkStore
 import com.peekaboo.core.PeekabooProvider
 import io.ktor.client.HttpClientConfig
-import io.ktor.client.plugins.api.*
-import io.ktor.client.request.*
-import io.ktor.client.statement.*
-import io.ktor.util.*
-import io.ktor.utils.io.*
+import io.ktor.client.plugins.api.createClientPlugin
+import io.ktor.client.statement.HttpResponseContainer
+import io.ktor.client.statement.HttpResponsePipeline
+import io.ktor.util.AttributeKey
+import io.ktor.utils.io.ByteReadChannel
 import io.ktor.utils.io.core.readBytes
 import java.util.UUID
 
@@ -18,10 +20,10 @@ private val PeekabooRequestId = AttributeKey<String>("PeekabooRequestId")
 /**
  * Ktor client plugin that captures HTTP requests and responses into Peekaboo's NetworkStore.
  *
- * Install this plugin BEFORE ContentNegotiation so it receives the raw response bytes:
+ * Install this plugin BEFORE ContentNegotiation:
  * ```
  * HttpClient(CIO) {
- *     install(PeekabooKtorPlugin)
+ *     installPeekaboo()
  *     install(ContentNegotiation) { gson() }
  * }
  * ```
@@ -35,20 +37,28 @@ val PeekabooKtorPlugin = createClientPlugin("PeekabooPlugin") {
         request.attributes.put(PeekabooRequestId, UUID.randomUUID().toString())
     }
 
-    transformResponseBody { response, content, _ ->
+    // Intercept at Receive phase — BEFORE Transform (where ContentNegotiation deserializes).
+    // transformResponseBody cannot be used here because Ktor 2.3.x validates that the
+    // returned value matches the requested type (e.g. List<Post>), causing a runtime error
+    // when we return ByteReadChannel.
+    client.responsePipeline.intercept(HttpResponsePipeline.Receive) {
+        val container = subject as? HttpResponseContainer ?: return@intercept
+        val (info, body) = container
+        if (body !is ByteReadChannel) return@intercept
+
         if (!PeekabooProvider.isInitialized() || !PeekabooProvider.instance.isRunning()) {
-            return@transformResponseBody content
+            return@intercept
         }
 
-        val startTime = response.call.request.attributes.getOrNull(PeekabooStartTime)
-            ?: System.currentTimeMillis()
-        val id = response.call.request.attributes.getOrNull(PeekabooRequestId)
-            ?: UUID.randomUUID().toString()
+        // context: HttpClientCall
+        val req = context.request
+        val startTime = req.attributes.getOrNull(PeekabooStartTime) ?: System.currentTimeMillis()
+        val id = req.attributes.getOrNull(PeekabooRequestId) ?: UUID.randomUUID().toString()
         val duration = System.currentTimeMillis() - startTime
         val bodyLimit = 1_000_000
 
         val allBytes = try {
-            content.readRemaining().readBytes()
+            (body as ByteReadChannel).readRemaining().readBytes()
         } catch (_: Exception) {
             ByteArray(0)
         }
@@ -57,7 +67,6 @@ val PeekabooKtorPlugin = createClientPlugin("PeekabooPlugin") {
             String(allBytes.take(bodyLimit).toByteArray(), Charsets.UTF_8)
         } else null
 
-        val req = response.call.request
         NetworkStore.add(
             CapturedRequest(
                 id = id,
@@ -67,8 +76,8 @@ val PeekabooKtorPlugin = createClientPlugin("PeekabooPlugin") {
                 requestHeaders = req.headers.entries()
                     .associate { it.key to it.value.joinToString(", ") },
                 requestBody = null,
-                responseCode = response.status.value,
-                responseHeaders = response.headers.entries()
+                responseCode = context.response.status.value,
+                responseHeaders = context.response.headers.entries()
                     .associate { it.key to it.value.joinToString(", ") },
                 responseBody = bodyText,
                 durationMs = duration,
@@ -76,7 +85,8 @@ val PeekabooKtorPlugin = createClientPlugin("PeekabooPlugin") {
             )
         )
 
-        ByteReadChannel(allBytes)
+        // Re-emit the same bytes so ContentNegotiation (Transform phase) can deserialize them.
+        proceedWith(HttpResponseContainer(info, ByteReadChannel(allBytes)))
     }
 }
 
