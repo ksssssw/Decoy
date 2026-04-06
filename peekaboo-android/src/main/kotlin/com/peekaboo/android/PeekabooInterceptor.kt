@@ -1,4 +1,4 @@
-package com.peekaboo.debug
+package com.peekaboo.android
 
 import com.peekaboo.core.CapturedRequest
 import com.peekaboo.core.MockRepository

@@ -22,7 +22,5 @@ dependencyResolutionManagement {
 rootProject.name = "Peekaboo"
 include(":app")
 include(":peekaboo-core")
-include(":peekaboo-debug")
-include(":peekaboo-noop")
+include(":peekaboo-android")
 include(":peekaboo-ktor")
-include(":peekaboo-ktor-noop")

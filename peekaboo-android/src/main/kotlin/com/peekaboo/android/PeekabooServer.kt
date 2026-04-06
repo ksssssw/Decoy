@@ -1,4 +1,4 @@
-package com.peekaboo.debug
+package com.peekaboo.android
 
 import android.content.Context
 import com.google.gson.Gson
@@ -24,15 +24,12 @@ import kotlinx.coroutines.launch
 import java.util.UUID
 import java.util.concurrent.CopyOnWriteArrayList
 
-class PeekabooServer(
-    private val context: Context,
-    private val port: Int = 8090
-) {
+internal class PeekabooServer(private val context: Context) {
     private var engine: ApplicationEngine? = null
     private val gson = Gson()
     private val activeSessions = CopyOnWriteArrayList<DefaultWebSocketSession>()
 
-    fun start() {
+    fun start(port: Int = 8090) {
         engine = embeddedServer(CIO, host = "0.0.0.0", port = port) {
             install(CORS) { anyHost() }
             install(ContentNegotiation) { gson() }
@@ -91,7 +88,7 @@ class PeekabooServer(
                     get("/status") {
                         call.respond(mapOf(
                             "running" to true,
-                            "port" to port,
+                            "port" to (engine?.environment?.connectors?.firstOrNull()?.port ?: 8090),
                             "callCount" to NetworkStore.getAll().size,
                             "mockCount" to MockRepository.getRules().size
                         ))

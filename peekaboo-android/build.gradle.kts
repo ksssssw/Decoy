@@ -3,7 +3,7 @@ plugins {
     alias(libs.plugins.kotlin.android)
 }
 android {
-    namespace = "com.peekaboo.debug"
+    namespace = "com.peekaboo.android"
     compileSdk = 34
     defaultConfig { minSdk = 24 }
     compileOptions {
@@ -15,6 +15,7 @@ android {
 dependencies {
     api(project(":peekaboo-core"))
     implementation(libs.okhttp)
+    implementation(libs.koin.android)
     implementation(libs.ktor.client.core)
     implementation(libs.ktor.server.core)
     implementation(libs.ktor.server.cio)

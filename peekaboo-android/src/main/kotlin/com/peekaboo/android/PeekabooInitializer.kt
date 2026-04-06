@@ -1,4 +1,4 @@
-package com.peekaboo.debug
+package com.peekaboo.android
 
 import android.content.ContentProvider
 import android.content.ContentValues
@@ -8,7 +8,8 @@ import com.peekaboo.core.PeekabooProvider
 
 class PeekabooInitializer : ContentProvider() {
     override fun onCreate(): Boolean {
-        val peekaboo = RealPeekaboo(context!!)
+        val koin = createPeekabooKoin(context!!).koin
+        val peekaboo = koin.get<RealPeekaboo>()
         peekaboo.start()
         PeekabooProvider.instance = peekaboo
         return true

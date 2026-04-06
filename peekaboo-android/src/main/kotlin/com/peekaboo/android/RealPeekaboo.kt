@@ -1,20 +1,21 @@
-package com.peekaboo.debug
+package com.peekaboo.android
 
-import android.content.Context
 import com.peekaboo.core.Peekaboo
 import okhttp3.Interceptor
 
-class RealPeekaboo(private val context: Context) : Peekaboo {
-    private val interceptor = PeekabooInterceptor()
+internal class RealPeekaboo(
+    private val interceptor: PeekabooInterceptor,
+    private val server: PeekabooServer,
+) : Peekaboo {
+
     private var port: Int = 8090
-    private val server by lazy { PeekabooServer(context, port) }
     private var running = false
 
     override fun getOkHttpInterceptor(): Interceptor = interceptor
 
     override fun start(port: Int) {
         this.port = port
-        server.start()
+        server.start(port)
         running = true
         android.util.Log.d("Peekaboo", "Peekaboo running at http://localhost:$port")
         android.util.Log.d("Peekaboo", "▶ Run on Mac: adb forward tcp:$port tcp:$port")

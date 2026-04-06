@@ -3,7 +3,7 @@
     <application>
         <provider
             android:name=".PeekabooInitializer"
-            android:authorities="${applicationId}.peekaboo-debug-init"
+            android:authorities="${applicationId}.peekaboo-android-init"
             android:exported="false" />
     </application>
 </manifest>
