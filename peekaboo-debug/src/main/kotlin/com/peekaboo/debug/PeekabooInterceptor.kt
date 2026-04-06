@@ -1,6 +1,7 @@
 package com.peekaboo.debug
 
 import com.peekaboo.core.CapturedRequest
+import com.peekaboo.core.MockRepository
 import com.peekaboo.core.NetworkStore
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
@@ -20,7 +21,7 @@ class PeekabooInterceptor : Interceptor {
         val requestBody = extractRequestBody(request)
 
         // Check for mock rule
-        val mockRule = MockRepository.findMatchingRule(request)
+        val mockRule = MockRepository.findMatchingRule(request.url.toString(), request.method)
         if (mockRule != null) {
             if (mockRule.delayMs > 0) Thread.sleep(mockRule.delayMs)
 

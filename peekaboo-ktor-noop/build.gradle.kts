@@ -3,7 +3,7 @@ plugins {
     alias(libs.plugins.kotlin.android)
 }
 android {
-    namespace = "com.peekaboo.noop"
+    namespace = "com.peekaboo.ktor.noop"
     compileSdk = 34
     defaultConfig { minSdk = 24 }
     compileOptions {
@@ -13,6 +13,5 @@ android {
     kotlinOptions { jvmTarget = "11" }
 }
 dependencies {
-    api(project(":peekaboo-core"))
-    implementation(libs.okhttp)
+    implementation(libs.ktor.client.core)
 }

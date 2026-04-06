@@ -3,6 +3,7 @@ package com.peekaboo.debug
 import android.content.Context
 import com.google.gson.Gson
 import com.peekaboo.core.CapturedRequest
+import com.peekaboo.core.MockRepository
 import com.peekaboo.core.MockRule
 import com.peekaboo.core.NetworkStore
 import io.ktor.http.*

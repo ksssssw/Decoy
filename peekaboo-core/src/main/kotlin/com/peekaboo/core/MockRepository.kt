@@ -1,7 +1,5 @@
-package com.peekaboo.debug
+package com.peekaboo.core
 
-import com.peekaboo.core.MockRule
-import okhttp3.Request
 import java.util.concurrent.CopyOnWriteArrayList
 
 object MockRepository {
@@ -23,11 +21,11 @@ object MockRepository {
 
     fun getRules(): List<MockRule> = rules.toList()
 
-    fun findMatchingRule(request: Request): MockRule? {
+    fun findMatchingRule(url: String, method: String): MockRule? {
         return rules.firstOrNull { rule ->
             rule.isEnabled &&
-            (rule.method == "*" || rule.method.equals(request.method, ignoreCase = true)) &&
-            runCatching { request.url.toString().matches(Regex(rule.urlPattern)) }.getOrDefault(false)
+            (rule.method == "*" || rule.method.equals(method, ignoreCase = true)) &&
+            runCatching { url.matches(Regex(rule.urlPattern)) }.getOrDefault(false)
         }
     }
 

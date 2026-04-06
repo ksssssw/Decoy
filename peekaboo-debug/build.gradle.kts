@@ -13,8 +13,9 @@ android {
     kotlinOptions { jvmTarget = "11" }
 }
 dependencies {
-    implementation(project(":peekaboo-core"))
+    api(project(":peekaboo-core"))
     implementation(libs.okhttp)
+    implementation(libs.ktor.client.core)
     implementation(libs.ktor.server.core)
     implementation(libs.ktor.server.cio)
     implementation(libs.ktor.server.websockets)

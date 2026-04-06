@@ -57,11 +57,8 @@ dependencies {
     implementation(libs.lifecycle.viewmodel.compose)
     debugImplementation(libs.compose.ui.tooling)
 
-    // Peekaboo
-    implementation(project(":peekaboo-core"))
-    implementation(project(":peekaboo-ktor"))
+    // Peekaboo — debug only, just like LeakCanary
     debugImplementation(project(":peekaboo-debug"))
-    releaseImplementation(project(":peekaboo-noop"))
 
     // Ktor client
     implementation(libs.ktor.client.cio)

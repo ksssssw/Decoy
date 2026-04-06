@@ -1,74 +1,89 @@
 # Peekaboo — Android Network Inspector
 
-A LeakCanary-style debug network inspector for Android. Add one line and inspect all OkHttp/Retrofit traffic in a built-in web UI at `localhost:8090`. Zero code changes required — auto-initializes via ContentProvider.
+A LeakCanary-style debug network inspector for Android. Add one line and inspect all Ktor/OkHttp traffic in a built-in web UI at `localhost:8090`. Zero production code changes — auto-initializes via ContentProvider, release builds contain zero Peekaboo code.
 
 ## Features
 
-- Captures all OkHttp/Retrofit requests and responses automatically
+- Captures all HTTP requests and responses automatically
 - Built-in web server at `localhost:8090` with REST API and WebSocket live updates
 - Response mocking with regex URL patterns, delay simulation, and per-rule toggle
-- Koin integration module for automatic interceptor injection
-- No-op release variant — inspector code is excluded from release builds
-- ContentProvider auto-initialization — no `Application.onCreate()` setup needed
+- Ktor client plugin included — no separate module needed
+- No-op in release — `debugImplementation` only, nothing ships to production
+- ContentProvider auto-initialization — no `Application.onCreate()` setup required
 
-## Screenshots
-
-> _(Add screenshots to `screenshots/` folder)_
+---
 
 ## Quick Start
 
-**Step 1** — Add to `build.gradle.kts`:
+**Step 1** — Add a single line to `build.gradle.kts`:
+
 ```kotlin
-debugImplementation("com.peekaboo:inspector-debug:1.0.0")
-releaseImplementation("com.peekaboo:inspector-noop:1.0.0")
+debugImplementation("com.peekaboo:peekaboo-debug:1.0.0")
 ```
 
-**Step 2** — Forward port from device to host:
+**Step 2** — Install the Ktor plugin in your debug `HttpClient`:
+
+```kotlin
+// app/src/debug/.../YourApplication.kt
+HttpClient(CIO) {
+    installPeekaboo()                   // provided by peekaboo-debug
+    install(ContentNegotiation) { ... }
+}
+```
+
+> Put the `HttpClient` setup in `src/debug/` so it only runs in debug builds.  
+> The `src/release/` version omits `installPeekaboo()` — no stubs or guards needed.
+
+**Step 3** — Forward port and open the browser:
+
 ```bash
 adb forward tcp:8090 tcp:8090
 ```
 
-**Step 3** — Open browser:
 ```
 http://localhost:8090
 ```
 
-That's it. No other code changes needed.
+That's it.
 
 ---
 
-## Retrofit + Koin Usage
+## OkHttp / Retrofit
 
 ```kotlin
-// build.gradle.kts
-debugImplementation("com.peekaboo:inspector-debug:1.0.0")
-debugImplementation("com.peekaboo:inspector-koin:1.0.0")
-releaseImplementation("com.peekaboo:inspector-noop:1.0.0")
-```
-
-```kotlin
-// Application.kt
-startKoin {
-    androidContext(this@App)
-    modules(networkInspectorModule, appModule)
-}
-
-// appModule
-val appModule = module {
-    single { OkHttpClient.Builder().withNetworkInspector().build() }
-    single { Retrofit.Builder().client(get())/* ... */.build() }
-}
-```
-
----
-
-## Retrofit without Koin Usage
-
-```kotlin
+// app/src/debug/.../YourApplication.kt
 val okHttpClient = OkHttpClient.Builder()
-    .addInterceptor(NetworkInspectorProvider.instance.getOkHttpInterceptor())
+    .addInterceptor(PeekabooProvider.instance.getOkHttpInterceptor())
     .build()
 ```
+
+Same pattern — put this only in `src/debug/`. In `src/release/` omit the interceptor.
+
+---
+
+## Source Set Pattern (mirrors LeakCanary)
+
+```
+app/
+├── src/
+│   ├── debug/
+│   │   └── YourApplication.kt   ← installPeekaboo() / addInterceptor(...)
+│   └── release/
+│       └── YourApplication.kt   ← plain HttpClient, no Peekaboo references
+```
+
+This is the same pattern LeakCanary recommends when you need to reference its API from application code. The release APK contains zero Peekaboo code.
+
+---
+
+## Module Structure
+
+| Module | Purpose |
+|---|---|
+| `peekaboo-debug` | Real implementation — web server + OkHttp interceptor + Ktor client plugin |
+| `peekaboo-noop` | No-op stubs (optional, for apps that reference Peekaboo API in main source set) |
+| `peekaboo-ktor` | Standalone Ktor client plugin (optional separate artifact) |
+| `peekaboo-core` | Shared interfaces & models (transitive — do not declare directly) |
 
 ---
 
@@ -83,8 +98,6 @@ val okHttpClient = OkHttpClient.Builder()
    - **Response Body** — JSON string to return
    - **Delay (ms)** — optional simulated network latency
 4. Toggle rules on/off without deleting them
-
-Alternatively, click **"Create Mock from this request"** in the request detail view to pre-fill the form.
 
 ---
 
@@ -109,44 +122,35 @@ Alternatively, click **"Create Mock from this request"** in the request detail v
 
 ```
 Peekaboo/
-├── app/                     # Sample app (Retrofit + Koin)
-│   ├── src/debug/           # Debug-only Application class (uses inspector-koin)
-│   └── src/release/         # Release Application class (no inspector)
+├── app/                        # Sample app demonstrating single-line integration
+│   ├── src/debug/              # Debug Application — installs Peekaboo Ktor plugin
+│   └── src/release/            # Release Application — plain HttpClient, no Peekaboo
 │
-├── inspector-core/          # Shared interfaces & data models
-│   ├── NetworkInspector     # Interface
-│   ├── NetworkInspectorProvider  # Singleton accessor
-│   ├── CapturedRequest      # Request/response data class
-│   └── MockRule             # Mock rule data class
+├── peekaboo-debug/             # debugImplementation only
+│   ├── PeekabooInterceptor     # OkHttp interceptor
+│   ├── installPeekaboo()       # Ktor client plugin (HttpClientConfig extension)
+│   ├── NetworkStore            # In-memory ring buffer (max 500 entries)
+│   ├── MockRepository          # Thread-safe mock rule storage
+│   ├── PeekabooServer          # Ktor embedded HTTP + WebSocket server
+│   ├── RealPeekaboo            # Peekaboo interface implementation
+│   └── PeekabooInitializer     # ContentProvider — auto-starts server on app launch
 │
-├── inspector-debug/         # Real implementation (debugImplementation only)
-│   ├── CaptureInterceptor   # OkHttp interceptor that captures traffic
-│   ├── NetworkStore         # In-memory ring buffer (max 500 entries)
-│   ├── MockRepository       # Thread-safe mock rule storage
-│   ├── InspectorServer      # Ktor embedded HTTP + WebSocket server
-│   ├── RealNetworkInspector # NetworkInspector implementation
-│   └── DebugInspectorInitializer  # ContentProvider auto-init
-│
-├── inspector-noop/          # No-op implementation (releaseImplementation only)
-│   ├── NoOpNetworkInspector # All methods are no-ops
-│   └── NoOpInspectorInitializer   # ContentProvider that sets up no-op
-│
-└── inspector-koin/          # Koin auto-injection module (debugImplementation)
-    ├── networkInspectorModule     # Koin module with OkHttpClient.Builder
-    └── withNetworkInspector()     # OkHttpClient.Builder extension
+├── peekaboo-noop/              # Optional — releaseImplementation for apps using Peekaboo API in main source set
+├── peekaboo-ktor/              # Optional standalone Ktor client plugin
+└── peekaboo-core/              # Shared interfaces (transitive via peekaboo-debug/noop)
 ```
 
 **Data flow:**
 
 ```
-OkHttp request
-    → CaptureInterceptor
+HTTP request
+    → PeekabooInterceptor / Ktor plugin
         → MockRepository.findMatchingRule()
             ├── match found → return mock response → NetworkStore.add()
-            └── no match   → chain.proceed() → NetworkStore.add()
-                                                     ↓
-                                             WebSocket push to browser
-                                             REST API polling from browser
+            └── no match   → proceed() → NetworkStore.add()
+                                              ↓
+                                      WebSocket push to browser
+                                      REST API polling from browser
 ```
 
 ---

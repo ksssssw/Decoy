@@ -5,7 +5,6 @@ import io.ktor.client.*
 import io.ktor.client.engine.cio.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.serialization.gson.*
-import com.peekaboo.ktor.installPeekaboo
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.context.startKoin
 import org.koin.dsl.module
@@ -23,7 +22,6 @@ class SampleApplication : Application() {
 val appModule = module {
     single {
         HttpClient(CIO) {
-            installPeekaboo()
             install(ContentNegotiation) { gson() }
         }
     }
