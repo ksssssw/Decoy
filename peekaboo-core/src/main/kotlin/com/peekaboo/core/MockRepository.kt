@@ -25,7 +25,7 @@ object MockRepository {
         return rules.firstOrNull { rule ->
             rule.isEnabled &&
             (rule.method == "*" || rule.method.equals(method, ignoreCase = true)) &&
-            runCatching { url.matches(Regex(rule.urlPattern)) }.getOrDefault(false)
+            runCatching { Regex(rule.urlPattern).containsMatchIn(url) }.getOrDefault(false)
         }
     }
 

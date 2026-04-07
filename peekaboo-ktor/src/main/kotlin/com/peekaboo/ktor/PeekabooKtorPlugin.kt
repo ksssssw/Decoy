@@ -21,6 +21,7 @@ import io.ktor.util.AttributeKey
 import io.ktor.util.date.GMTDate
 import io.ktor.utils.io.ByteReadChannel
 import io.ktor.utils.io.core.readBytes
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import java.util.UUID
@@ -82,7 +83,7 @@ val PeekabooKtorPlugin = createClientPlugin("PeekabooPlugin") {
                 },
                 version = HttpProtocolVersion.HTTP_1_1,
                 body = ByteReadChannel(mockRule.responseBody.toByteArray()),
-                callContext = currentCoroutineContext()
+                callContext = currentCoroutineContext() + Job(currentCoroutineContext()[Job])
             )
 
             NetworkStore.add(

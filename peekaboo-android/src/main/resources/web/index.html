@@ -224,7 +224,7 @@ tailwind.config = {
       <div class="grid grid-cols-3 gap-6">
         <div class="col-span-2 space-y-1.5">
           <label class="font-label text-[10px] font-bold uppercase tracking-widest text-primary block">URL Pattern (Regex)</label>
-          <input id="f-pattern" type="text" required placeholder="^/api/v1/…"
+          <input id="f-pattern" type="text" required placeholder="e.g. /posts or https://api\.example\.com/users/\d+"
             class="w-full bg-transparent border-b-2 border-outline-variant focus:border-primary text-sm font-mono py-2 transition-all placeholder:text-outline outline-none text-on-surface"/>
         </div>
         <div class="space-y-1.5">
@@ -733,8 +733,8 @@ async function clearRequests() {
 function createMockFromRequest() {
   const r = S.selected;
   if (!r) return;
-  const path = urlPath(r.url).replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
-  openCreateModal({ urlPattern:path, method:r.method, statusCode:r.responseCode||200, responseBody:r.responseBody||'' });
+  const pattern = r.url.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+  openCreateModal({ urlPattern:pattern, method:r.method, statusCode:r.responseCode||200, responseBody:r.responseBody||'' });
   setTab('rules');
 }
 
