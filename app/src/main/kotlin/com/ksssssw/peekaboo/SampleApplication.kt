@@ -1,6 +1,7 @@
 package com.ksssssw.peekaboo
 
 import android.app.Application
+import com.peekaboo.ktor.installPeekaboo
 import io.ktor.client.*
 import io.ktor.client.engine.cio.*
 import io.ktor.client.plugins.contentnegotiation.*
@@ -22,6 +23,7 @@ class SampleApplication : Application() {
 val appModule = module {
     single {
         HttpClient(CIO) {
+            installPeekaboo()  // debug: captures traffic / release: no-op
             install(ContentNegotiation) { gson() }
         }
     }

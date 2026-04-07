@@ -12,7 +12,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.peekaboo.core.PeekabooProvider
+import com.peekaboo.android.PeekabooLauncher
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
@@ -34,10 +34,8 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun openInspector() {
-        if (PeekabooProvider.isInitialized() && PeekabooProvider.instance.isRunning()) {
-            val port = PeekabooProvider.instance.getPort()
-            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("http://localhost:$port")))
-        }
+        val url = PeekabooLauncher.getInspectorUrl() ?: return
+        startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
     }
 }
 

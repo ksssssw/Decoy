@@ -14,9 +14,8 @@ android {
 }
 dependencies {
     api(project(":peekaboo-core"))
+    api(project(":peekaboo-ktor"))
     implementation(libs.okhttp)
-    implementation(libs.koin.android)
-    implementation(libs.ktor.client.core)
     implementation(libs.ktor.server.core)
     implementation(libs.ktor.server.cio)
     implementation(libs.ktor.server.websockets)

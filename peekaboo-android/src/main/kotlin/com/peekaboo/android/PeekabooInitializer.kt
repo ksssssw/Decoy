@@ -8,8 +8,9 @@ import com.peekaboo.core.PeekabooProvider
 
 class PeekabooInitializer : ContentProvider() {
     override fun onCreate(): Boolean {
-        val koin = createPeekabooKoin(context!!).koin
-        val peekaboo = koin.get<RealPeekaboo>()
+        val interceptor = PeekabooInterceptor()
+        val server = PeekabooServer(context!!)
+        val peekaboo = RealPeekaboo(interceptor, server)
         peekaboo.start()
         PeekabooProvider.instance = peekaboo
         return true
