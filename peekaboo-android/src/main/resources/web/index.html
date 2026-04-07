@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-<title>NET_INSPECTOR_V1</title>
+<title>PEEKABOO_INSPECTOR</title>
 <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
@@ -74,33 +74,40 @@ tailwind.config = {
   input[type=range] { -webkit-appearance:none; appearance:none; height:4px; background:#282a30; border-radius:2px; outline:none; }
   input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:14px; height:14px; border-radius:50%; background:#acc7ff; cursor:pointer; }
   select option { background:#1e1f26; }
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.4;}}
+
+  /* Mobile detail overlay */
+  #detail-section.mobile-active {
+    display: flex !important;
+    position: fixed;
+    left: 0; right: 0;
+    top: 3.5rem;
+    bottom: 3.5rem;
+    z-index: 30;
+    flex-direction: column;
+    background: #0c0e14;
+  }
 </style>
 </head>
 <body class="bg-background text-on-background font-body overflow-hidden" style="height:100vh;">
 
 <!-- ── TOP NAV ─────────────────────────────────────────────── -->
-<header class="fixed top-0 left-0 right-0 h-14 z-50 flex items-center justify-between px-6 bg-surface border-b border-surface-container-high">
-  <div class="flex items-center gap-8">
-    <span class="font-headline text-lg font-bold tracking-widest text-primary uppercase select-none">NET_INSPECTOR_V1</span>
+<header class="fixed top-0 left-0 right-0 h-14 z-50 flex items-center justify-between px-4 md:px-6 bg-surface border-b border-surface-container-high">
+  <div class="flex items-center gap-6">
+    <span class="font-headline text-base font-bold tracking-widest text-primary uppercase select-none">PEEKABOO</span>
     <nav class="hidden md:flex items-center h-14 gap-0">
-      <button id="tnav-traffic"   onclick="setTab('traffic')"   class="font-label text-[13px] uppercase tracking-tight h-full px-4 border-b-2 transition-colors">Traffic</button>
-      <button id="tnav-rules"     onclick="setTab('rules')"     class="font-label text-[13px] uppercase tracking-tight h-full px-4 border-b-2 transition-colors">Rewrites</button>
-      <button id="tnav-snapshots" onclick="setTab('snapshots')" class="font-label text-[13px] uppercase tracking-tight h-full px-4 border-b-2 transition-colors">Snapshots</button>
+      <button id="tnav-traffic" onclick="setTab('traffic')" class="font-label text-[13px] uppercase tracking-tight h-full px-4 border-b-2 transition-colors">Traffic</button>
+      <button id="tnav-rules"   onclick="setTab('rules')"   class="font-label text-[13px] uppercase tracking-tight h-full px-4 border-b-2 transition-colors">Rewrites</button>
     </nav>
   </div>
-  <div class="flex items-center gap-3">
-    <button onclick="clearRequests()" class="px-3 py-1.5 text-xs font-bold uppercase tracking-wider bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest transition-all active:scale-95 font-label rounded-sm">Clear All</button>
-    <button onclick="openCreateModal()" class="px-3 py-1.5 text-xs font-bold uppercase tracking-wider bg-primary-container text-on-primary-container hover:opacity-90 transition-all active:scale-95 font-label rounded-sm">Create Mock</button>
-    <div class="flex items-center gap-0.5 ml-2 pl-3 border-l border-surface-container-high text-outline">
-      <button class="material-symbols-outlined p-1.5 hover:text-primary hover:bg-surface-container rounded transition-all" title="Filter">filter_alt</button>
-      <button onclick="clearRequests()" class="material-symbols-outlined p-1.5 hover:text-primary hover:bg-surface-container rounded transition-all" title="Clear All">delete_sweep</button>
-      <button class="material-symbols-outlined p-1.5 hover:text-primary hover:bg-surface-container rounded transition-all" title="Settings">settings</button>
-    </div>
+  <div class="flex items-center gap-2">
+    <button onclick="clearRequests()" class="px-3 py-1.5 text-xs font-bold uppercase tracking-wider bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest transition-all active:scale-95 font-label rounded-sm">Clear</button>
+    <button onclick="openCreateModal()" class="px-3 py-1.5 text-xs font-bold uppercase tracking-wider bg-primary-container text-on-primary-container hover:opacity-90 transition-all active:scale-95 font-label rounded-sm">+ Mock</button>
   </div>
 </header>
 
-<!-- ── SIDE NAV ────────────────────────────────────────────── -->
-<aside class="fixed left-0 top-14 w-20 z-40 flex flex-col bg-surface-container-low border-r border-surface-container-high" style="height:calc(100vh - 3.5rem);">
+<!-- ── SIDE NAV (desktop only) ────────────────────────────── -->
+<aside class="hidden md:flex fixed left-0 top-14 w-20 z-40 flex-col bg-surface-container-low border-r border-surface-container-high" style="height:calc(100vh - 3.5rem);">
   <div class="flex flex-col items-center pt-4 pb-2 gap-0.5 flex-1">
     <div class="flex flex-col items-center gap-0.5 mb-5">
       <div class="w-8 h-8 rounded-lg bg-surface-container-high flex items-center justify-center text-primary">
@@ -108,41 +115,39 @@ tailwind.config = {
       </div>
       <span class="font-label text-[9px] font-black text-primary tracking-wider">v1.0.0</span>
     </div>
-    <button id="snav-traffic"   onclick="setTab('traffic')"   class="snav-btn w-full flex flex-col items-center gap-1 py-2.5 transition-all cursor-pointer">
+    <button id="snav-traffic" onclick="setTab('traffic')" class="snav-btn w-full flex flex-col items-center gap-1 py-2.5 transition-all cursor-pointer">
       <span class="material-symbols-outlined">swap_vert</span>
       <span class="font-label text-[10px] font-bold uppercase tracking-wider">Requests</span>
     </button>
-    <button id="snav-rules"     onclick="setTab('rules')"     class="snav-btn w-full flex flex-col items-center gap-1 py-2.5 transition-all cursor-pointer">
+    <button id="snav-rules" onclick="setTab('rules')" class="snav-btn w-full flex flex-col items-center gap-1 py-2.5 transition-all cursor-pointer">
       <span class="material-symbols-outlined">terminal</span>
       <span class="font-label text-[10px] font-bold uppercase tracking-wider">Rules</span>
-    </button>
-    <button class="snav-btn w-full flex flex-col items-center gap-1 py-2.5 text-outline hover:bg-surface-container-high hover:text-on-surface-variant transition-all cursor-pointer">
-      <span class="material-symbols-outlined">router</span>
-      <span class="font-label text-[10px] font-bold uppercase tracking-wider">Proxies</span>
-    </button>
-    <button class="snav-btn w-full flex flex-col items-center gap-1 py-2.5 text-outline hover:bg-surface-container-high hover:text-on-surface-variant transition-all cursor-pointer">
-      <span class="material-symbols-outlined">list_alt</span>
-      <span class="font-label text-[10px] font-bold uppercase tracking-wider">Logs</span>
-    </button>
-  </div>
-  <div class="border-t border-surface-container-high py-3 flex flex-col items-center gap-2">
-    <button class="flex flex-col items-center gap-1 text-outline hover:text-on-surface-variant transition-colors">
-      <span class="material-symbols-outlined text-xl">help_outline</span>
-      <span class="font-label text-[9px] font-bold uppercase tracking-wider">Docs</span>
     </button>
   </div>
 </aside>
 
+<!-- ── MOBILE BOTTOM NAV ───────────────────────────────────── -->
+<nav class="md:hidden fixed bottom-0 left-0 right-0 h-14 z-40 flex bg-surface-container-low border-t border-surface-container-high">
+  <button id="mnav-traffic" onclick="setTab('traffic')" class="flex-1 flex flex-col items-center justify-center gap-1 transition-colors">
+    <span class="material-symbols-outlined text-xl">swap_vert</span>
+    <span class="font-label text-[10px] font-bold uppercase tracking-wider">Requests</span>
+  </button>
+  <button id="mnav-rules" onclick="setTab('rules')" class="flex-1 flex flex-col items-center justify-center gap-1 transition-colors">
+    <span class="material-symbols-outlined text-xl">terminal</span>
+    <span class="font-label text-[10px] font-bold uppercase tracking-wider">Rules</span>
+  </button>
+</nav>
+
 <!-- ── MAIN ────────────────────────────────────────────────── -->
-<main class="flex flex-col" style="margin-left:5rem; padding-top:3.5rem; height:100vh;">
+<main class="flex flex-col md:ml-20 pt-14 pb-14 md:pb-0" style="height:100vh;">
 
   <!-- ── TRAFFIC VIEW ──────────────────────────────────────── -->
   <div id="view-traffic" class="flex flex-1 overflow-hidden">
 
     <!-- Left: Request List -->
-    <section class="flex flex-col border-r border-surface-container-high bg-surface" style="width:18rem;flex-shrink:0;">
+    <section class="flex flex-col border-r border-surface-container-high bg-surface w-full md:w-72 md:flex-shrink-0">
       <div class="flex-shrink-0 h-10 flex items-center justify-between px-4 border-b border-surface-container-high bg-surface-container-low">
-        <span id="req-count" class="font-mono text-[10px] uppercase tracking-widest text-outline font-bold">Live Stream — 0 Requests</span>
+        <span id="req-count" class="font-mono text-[10px] uppercase tracking-widest text-outline font-bold">Live — 0 Requests</span>
         <button onclick="clearRequests()" class="material-symbols-outlined text-sm text-outline hover:text-error transition-colors" title="Clear">delete_sweep</button>
       </div>
       <div class="flex-shrink-0 px-3 py-2 border-b border-surface-container-high bg-surface-container-low">
@@ -153,47 +158,45 @@ tailwind.config = {
     </section>
 
     <!-- Right: Detail Panel -->
-    <section class="flex flex-col flex-1 overflow-hidden bg-surface-container-lowest">
-      <div class="flex-shrink-0 h-10 flex items-center px-6 gap-6 border-b border-surface-container-high bg-surface-container-low">
+    <section id="detail-section" class="hidden md:flex flex-col flex-1 overflow-hidden bg-surface-container-lowest">
+      <div class="flex-shrink-0 h-10 flex items-center px-3 md:px-6 gap-4 md:gap-6 border-b border-surface-container-high bg-surface-container-low">
+        <button onclick="closeDetail()" class="md:hidden flex-shrink-0 material-symbols-outlined text-outline hover:text-on-surface transition-colors">arrow_back</button>
         <button id="dtab-request"  onclick="setDetailTab('request')"  class="font-label text-[11px] font-bold uppercase tracking-wider h-full border-b-2 transition-colors">Request</button>
         <button id="dtab-response" onclick="setDetailTab('response')" class="font-label text-[11px] font-bold uppercase tracking-wider h-full border-b-2 transition-colors">Response</button>
         <button id="dtab-headers"  onclick="setDetailTab('headers')"  class="font-label text-[11px] font-bold uppercase tracking-wider h-full border-b-2 transition-colors">Headers</button>
       </div>
-      <div id="detail-content" class="flex-1 overflow-y-auto p-6"></div>
-      <div class="flex-shrink-0 h-16 flex items-center justify-between px-6 border-t border-surface-container-high bg-surface-container-low">
-        <div class="flex gap-2">
-          <button onclick="createMockFromRequest()" class="flex items-center gap-2 px-4 py-2 bg-primary text-on-primary text-xs font-bold uppercase tracking-wider font-label hover:opacity-90 active:scale-95 transition-all rounded-sm">
-            <span class="material-symbols-outlined text-sm">magic_button</span>Create Mock from Request
-          </button>
-          <button onclick="copyAsCurl()" class="flex items-center gap-2 px-4 py-2 border border-surface-container-high text-on-surface-variant text-xs font-bold uppercase tracking-wider font-label hover:bg-surface-container-high active:scale-95 transition-all rounded-sm">
-            <span class="material-symbols-outlined text-sm">content_copy</span>Copy as cURL
-          </button>
-        </div>
-        <div class="flex items-center gap-1 text-outline">
-          <button class="material-symbols-outlined p-1.5 hover:text-primary transition-colors rounded" title="Share">share</button>
-          <button onclick="replayRequest()" class="material-symbols-outlined p-1.5 hover:text-primary transition-colors rounded" title="Replay">replay</button>
-        </div>
+      <div id="detail-content" class="flex-1 overflow-y-auto p-4 md:p-6"></div>
+      <div class="flex-shrink-0 h-auto min-h-[4rem] flex items-center flex-wrap gap-2 px-4 md:px-6 py-3 border-t border-surface-container-high bg-surface-container-low">
+        <button onclick="createMockFromRequest()" class="flex items-center gap-2 px-3 py-2 bg-primary text-on-primary text-xs font-bold uppercase tracking-wider font-label hover:opacity-90 active:scale-95 transition-all rounded-sm">
+          <span class="material-symbols-outlined text-sm">magic_button</span><span class="hidden sm:inline">Create Mock from Request</span><span class="sm:hidden">Mock</span>
+        </button>
+        <button onclick="copyAsCurl()" class="flex items-center gap-2 px-3 py-2 border border-surface-container-high text-on-surface-variant text-xs font-bold uppercase tracking-wider font-label hover:bg-surface-container-high active:scale-95 transition-all rounded-sm">
+          <span class="material-symbols-outlined text-sm">content_copy</span><span class="hidden sm:inline">Copy as cURL</span><span class="sm:hidden">cURL</span>
+        </button>
+        <button onclick="replayRequest()" class="ml-auto flex items-center gap-1.5 px-3 py-2 text-xs font-bold uppercase tracking-wider text-outline hover:text-primary font-label transition-colors">
+          <span class="material-symbols-outlined text-sm">replay</span><span class="hidden sm:inline">Replay</span>
+        </button>
       </div>
     </section>
   </div>
 
   <!-- ── RULES VIEW ────────────────────────────────────────── -->
   <div id="view-rules" class="flex-1 overflow-y-auto bg-surface-container-lowest hidden">
-    <div class="p-8" style="max-width:72rem;margin:0 auto;">
-      <div class="flex justify-between items-end mb-8">
+    <div class="p-4 md:p-8" style="max-width:72rem;margin:0 auto;">
+      <div class="flex justify-between items-end mb-6 md:mb-8">
         <div>
-          <h1 class="font-headline text-3xl font-bold tracking-tight text-on-background">Mock Rules</h1>
+          <h1 class="font-headline text-2xl md:text-3xl font-bold tracking-tight text-on-background">Mock Rules</h1>
           <p class="text-sm text-outline font-body mt-1">Intercept and rewrite traffic based on matching patterns.</p>
         </div>
         <div class="flex gap-3 items-center">
-          <span id="rules-count" class="text-[11px] font-mono text-outline uppercase tracking-widest bg-surface-container px-3 py-1 rounded-sm border border-outline-variant/20">0 Rules Active</span>
+          <span id="rules-count" class="hidden sm:block text-[11px] font-mono text-outline uppercase tracking-widest bg-surface-container px-3 py-1 rounded-sm border border-outline-variant/20">0 Rules Active</span>
           <button onclick="openCreateModal()" class="flex items-center gap-2 px-4 py-2 text-xs font-bold uppercase tracking-wider bg-primary-container text-on-primary-container hover:opacity-90 active:scale-95 transition-all font-label rounded-sm">
             <span class="material-symbols-outlined text-sm">add</span>Create Rule
           </button>
         </div>
       </div>
-      <div class="bg-surface border border-outline-variant/10 rounded-sm overflow-hidden">
-        <div class="grid gap-4 px-6 py-3 bg-surface-container-low border-b border-outline-variant/20 text-[10px] font-bold uppercase tracking-widest text-outline" style="grid-template-columns:2rem 5rem 1fr 3.5rem 4.5rem 6rem;">
+      <div class="bg-surface border border-outline-variant/10 rounded-sm overflow-hidden overflow-x-auto">
+        <div class="grid gap-4 px-6 py-3 bg-surface-container-low border-b border-outline-variant/20 text-[10px] font-bold uppercase tracking-widest text-outline" style="grid-template-columns:2rem 5rem 1fr 3.5rem 4.5rem 6rem; min-width:480px;">
           <div></div><div>Method</div><div>URL Pattern</div><div class="text-center">Code</div><div class="text-center">Delay</div><div class="text-right">Actions</div>
         </div>
         <div id="rules-list" class="divide-y divide-outline-variant/10"></div>
@@ -201,19 +204,12 @@ tailwind.config = {
     </div>
   </div>
 
-  <!-- ── SNAPSHOTS VIEW ────────────────────────────────────── -->
-  <div id="view-snapshots" class="flex-1 overflow-y-auto bg-surface-container-lowest hidden">
-    <div class="flex flex-col items-center justify-center h-full text-outline">
-      <span class="material-symbols-outlined text-5xl mb-3 opacity-20">photo_camera</span>
-      <p class="text-[11px] font-label uppercase tracking-widest opacity-20">Snapshots coming soon</p>
-    </div>
-  </div>
 </main>
 
 <!-- ── MOCK MODAL ──────────────────────────────────────────── -->
 <div id="modal" class="hidden fixed inset-0 z-[100] flex items-center justify-center p-4 bg-surface-container-lowest/80 backdrop-blur-sm">
-  <div class="w-full glass border border-primary/20 rounded-xl shadow-2xl overflow-hidden anim-in" style="max-width:40rem;">
-    <div class="px-6 py-4 bg-surface-container flex justify-between items-center border-b border-outline-variant/30">
+  <div class="w-full glass border border-primary/20 rounded-xl shadow-2xl overflow-hidden anim-in" style="max-width:40rem; max-height:90vh; overflow-y:auto;">
+    <div class="px-6 py-4 bg-surface-container flex justify-between items-center border-b border-outline-variant/30 sticky top-0 z-10">
       <div class="flex items-center gap-2">
         <span id="modal-icon" class="material-symbols-outlined text-primary">add_box</span>
         <h2 id="modal-title" class="font-headline font-bold uppercase tracking-wider text-on-surface">Create Mock Rule</h2>
@@ -221,8 +217,8 @@ tailwind.config = {
       <button onclick="closeModal()" class="material-symbols-outlined text-outline hover:text-on-surface transition-colors">close</button>
     </div>
     <form onsubmit="saveMock(event)" class="p-6 space-y-6">
-      <div class="grid grid-cols-3 gap-6">
-        <div class="col-span-2 space-y-1.5">
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-6">
+        <div class="sm:col-span-2 space-y-1.5">
           <label class="font-label text-[10px] font-bold uppercase tracking-widest text-primary block">URL Pattern (Regex)</label>
           <input id="f-pattern" type="text" required placeholder="e.g. /posts or https://api\.example\.com/users/\d+"
             class="w-full bg-transparent border-b-2 border-outline-variant focus:border-primary text-sm font-mono py-2 transition-all placeholder:text-outline outline-none text-on-surface"/>
@@ -230,11 +226,12 @@ tailwind.config = {
         <div class="space-y-1.5">
           <label class="font-label text-[10px] font-bold uppercase tracking-widest text-primary block">Method</label>
           <select id="f-method" class="w-full bg-transparent border-b-2 border-outline-variant focus:border-primary text-sm py-2 transition-all appearance-none outline-none text-on-surface cursor-pointer">
+            <option value="*">ANY</option>
             <option>GET</option><option>POST</option><option>PUT</option><option>PATCH</option><option>DELETE</option>
           </select>
         </div>
       </div>
-      <div class="grid grid-cols-3 gap-6">
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-6">
         <div class="space-y-1.5">
           <label class="font-label text-[10px] font-bold uppercase tracking-widest text-primary block">Status Code</label>
           <input id="f-code" type="number" value="200" min="100" max="599"
@@ -248,7 +245,7 @@ tailwind.config = {
             <button type="button" onclick="document.getElementById('f-code').value=500" class="text-[9px] px-1.5 py-0.5 rounded-sm bg-surface-container-highest text-outline hover:text-primary border border-transparent hover:border-primary/40 transition-all font-mono">500</button>
           </div>
         </div>
-        <div class="col-span-2 space-y-1.5">
+        <div class="sm:col-span-2 space-y-1.5">
           <div class="flex justify-between items-center">
             <label class="font-label text-[10px] font-bold uppercase tracking-widest text-primary">Network Delay (ms)</label>
             <span id="delay-val" class="font-mono text-[11px] text-secondary">0ms</span>
@@ -279,6 +276,17 @@ tailwind.config = {
           class="w-full bg-transparent border-b-2 border-outline-variant focus:border-primary text-sm py-2 transition-all placeholder:text-outline outline-none text-on-surface"/>
       </div>
       <input type="hidden" id="f-id"/>
+
+      <!-- Duplicate warning -->
+      <div id="dup-warning" class="hidden p-4 rounded-sm border border-error/30 bg-error-container/20">
+        <p class="text-[11px] font-bold text-error font-label uppercase tracking-wide mb-3">A rule with this URL pattern and method already exists.</p>
+        <p class="text-[11px] text-on-surface-variant font-body mb-4">Enabling multiple rules for the same endpoint makes it ambiguous which one is applied. Would you like to update the existing rule instead?</p>
+        <div class="flex gap-2 flex-wrap">
+          <button type="button" onclick="updateExistingDuplicate()" class="px-4 py-1.5 text-[10px] font-bold uppercase tracking-wider bg-primary text-on-primary rounded-sm hover:opacity-90 transition-all font-label">Update Existing</button>
+          <button type="button" onclick="createAnyway()" class="px-4 py-1.5 text-[10px] font-bold uppercase tracking-wider bg-surface-container-high text-on-surface-variant rounded-sm hover:bg-surface-container-highest transition-all font-label">Create Anyway</button>
+        </div>
+      </div>
+
       <div class="flex justify-end gap-3 pt-4 border-t border-outline-variant/20">
         <button type="button" onclick="closeModal()" class="px-5 py-2 text-[11px] font-bold uppercase tracking-widest text-outline hover:text-on-surface transition-colors font-label">Cancel</button>
         <button type="submit" class="px-8 py-2 text-[11px] font-bold uppercase tracking-widest bg-primary text-on-primary hover:opacity-90 active:scale-95 transition-all rounded-sm font-label">Save Rule</button>
@@ -288,19 +296,16 @@ tailwind.config = {
 </div>
 
 <!-- ── STATUS OVERLAY ──────────────────────────────────────── -->
-<div class="fixed bottom-4 right-4 z-50 pointer-events-none" style="background:rgba(17,19,25,0.82);backdrop-filter:blur(12px);border:1px solid rgba(172,199,255,0.2);padding:0.5rem 0.75rem;border-radius:0.125rem;" class="flex items-center gap-3">
-  <div class="flex items-center gap-3">
-    <div id="status-dot" class="w-2 h-2 rounded-full bg-green-500" style="animation:pulse 2s infinite;"></div>
-    <div class="flex flex-col">
-      <span id="status-label" class="font-label text-[9px] font-bold uppercase tracking-wider text-primary">Connecting…</span>
-      <span id="status-port"  class="font-mono text-[8px] text-outline">127.0.0.1:8090</span>
-    </div>
+<div class="fixed bottom-16 md:bottom-4 right-4 z-50 pointer-events-none flex items-center gap-3" style="background:rgba(17,19,25,0.82);backdrop-filter:blur(12px);border:1px solid rgba(172,199,255,0.2);padding:0.5rem 0.75rem;border-radius:0.125rem;">
+  <div id="status-dot" class="w-2 h-2 rounded-full bg-green-500 flex-shrink-0" style="animation:pulse 2s infinite;"></div>
+  <div class="flex flex-col">
+    <span id="status-label" class="font-label text-[9px] font-bold uppercase tracking-wider text-primary">Connecting…</span>
+    <span id="status-port"  class="font-mono text-[8px] text-outline">127.0.0.1:8090</span>
   </div>
 </div>
-<style>@keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.4;}}</style>
 
 <!-- ── TOAST ───────────────────────────────────────────────── -->
-<div id="toast" class="hidden fixed bottom-20 right-4 z-[200] pointer-events-none bg-surface-container border border-outline-variant/30 text-on-surface text-xs font-mono px-4 py-2 rounded-sm anim-in"></div>
+<div id="toast" class="hidden fixed bottom-20 md:bottom-20 right-4 z-[200] pointer-events-none bg-surface-container border border-outline-variant/30 text-on-surface text-xs font-mono px-4 py-2 rounded-sm anim-in"></div>
 
 <script>
 // ══════════════════════════════════════════════════
@@ -316,6 +321,8 @@ const S = {
   filter: '',
   editId: null,
   ws: null,
+  dupConfirmed: false,
+  _dupId: null,
 };
 
 // ══════════════════════════════════════════════════
@@ -355,9 +362,12 @@ function methodBadge(m) {
     PUT:    'bg-[#33343b] text-yellow-400 border border-yellow-400/25',
     PATCH:  'bg-[#33343b] text-[#b2c7f5] border border-[#b2c7f5]/25',
     DELETE: 'bg-[#93000a]/20 text-[#ffb4ab] border border-[#ffb4ab]/25',
+    '*':    'bg-[#33343b] text-[#8c909e] border border-[#8c909e]/25',
   };
-  const cls = map[(m||'').toUpperCase()] || 'bg-[#33343b] text-[#8c909e] border border-[#8c909e]/25';
-  return `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase font-mono ${cls}">${esc(m||'?')}</span>`;
+  const key = (m||'').toUpperCase();
+  const cls = map[key] || 'bg-[#33343b] text-[#8c909e] border border-[#8c909e]/25';
+  const label = key === '*' ? 'ANY' : esc(m || '?');
+  return `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase font-mono ${cls}">${label}</span>`;
 }
 
 function urlPath(url) {
@@ -428,16 +438,24 @@ function setStatus(ok) {
 // ══════════════════════════════════════════════════
 function setTab(tab) {
   S.tab = tab;
-  ['traffic','rules','snapshots'].forEach(t => {
+  ['traffic','rules'].forEach(t => {
     const v = document.getElementById(`view-${t}`);
     const tn = document.getElementById(`tnav-${t}`);
     const sn = document.getElementById(`snav-${t}`);
+    const mn = document.getElementById(`mnav-${t}`);
     if (v) v.classList.toggle('hidden', t!==tab);
-    if (tn) { tn.className = tn.className.replace(/tab-active|tab-inactive/g,'').trim() + (t===tab?' tab-active':' tab-inactive'); }
+    if (tn) {
+      tn.className = tn.className.replace(/tab-active|tab-inactive/g,'').trim() + (t===tab?' tab-active':' tab-inactive');
+    }
     if (sn) {
       sn.className = t===tab
         ? 'snav-btn w-full flex flex-col items-center gap-1 py-2.5 bg-surface-container-high text-primary border-r-2 border-[#4f8ef7] cursor-pointer'
         : 'snav-btn w-full flex flex-col items-center gap-1 py-2.5 text-outline hover:bg-surface-container-high hover:text-on-surface-variant transition-all cursor-pointer';
+    }
+    if (mn) {
+      mn.className = t===tab
+        ? 'flex-1 flex flex-col items-center justify-center gap-1 text-primary border-t-2 border-primary transition-colors'
+        : 'flex-1 flex flex-col items-center justify-center gap-1 text-outline hover:text-on-surface-variant border-t-2 border-transparent transition-colors';
     }
   });
 }
@@ -465,7 +483,7 @@ function filterRequests(v) { S.filter = v; applyFilter(); renderList(); }
 // RENDER: REQUEST LIST
 // ══════════════════════════════════════════════════
 function renderList() {
-  document.getElementById('req-count').textContent = `Live Stream — ${S.requests.length} Request${S.requests.length!==1?'s':''}`;
+  document.getElementById('req-count').textContent = `Live — ${S.requests.length} Request${S.requests.length!==1?'s':''}`;
   const el = document.getElementById('request-list');
   if (!S.filtered.length) {
     el.innerHTML = `<div class="flex flex-col items-center justify-center py-16 text-outline">
@@ -496,6 +514,17 @@ function renderList() {
 // ══════════════════════════════════════════════════
 function selectReq(id) {
   S.selected = S.requests.find(r=>r.id===id)||null;
+  // On mobile, show detail as overlay
+  if (S.selected && window.innerWidth < 768) {
+    document.getElementById('detail-section').classList.add('mobile-active');
+  }
+  renderList();
+  renderDetail();
+}
+
+function closeDetail() {
+  S.selected = null;
+  document.getElementById('detail-section').classList.remove('mobile-active');
   renderList();
   renderDetail();
 }
@@ -516,7 +545,7 @@ function renderDetail() {
       ${r.isMocked?'<span class="px-1.5 py-0.5 rounded-sm text-[9px] font-black bg-[#6b42f5] text-white">MOCK</span>':''}
       <code class="text-primary font-mono text-xs break-all select-all flex-1 min-w-0">${esc(r.url)}</code>
     </div>
-    <div class="grid grid-cols-4 gap-4 border-t border-surface-container-high pt-3 mt-1">
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 border-t border-surface-container-high pt-3 mt-1">
       ${metaCell('Status', `<span class="font-mono text-xs font-bold ${scColor(sc)}">${sc?sc+' '+scText(sc):r.error||'Pending'}</span>`)}
       ${metaCell('Timestamp', `<span class="font-mono text-xs text-on-surface-variant">${dtFormat(r.timestamp)}</span>`)}
       ${metaCell('Duration',  `<span class="font-mono text-xs text-on-surface-variant">${durStr(r.durationMs)}</span>`)}
@@ -596,7 +625,8 @@ function copyBody(which) {
 // ══════════════════════════════════════════════════
 function renderRules() {
   const active = S.mocks.filter(m=>m.isEnabled).length;
-  document.getElementById('rules-count').textContent = `${active} Rule${active!==1?'s':''} Active`;
+  const rc = document.getElementById('rules-count');
+  if (rc) rc.textContent = `${active} Rule${active!==1?'s':''} Active`;
   const el = document.getElementById('rules-list');
   if (!S.mocks.length) {
     el.innerHTML = `<div class="flex items-center justify-center py-14 text-outline">
@@ -611,13 +641,16 @@ function renderRules() {
     const dim = m.isEnabled ? '' : 'opacity-40';
     const trackBg = m.isEnabled ? '#508ff8' : '#33343b';
     const thumbPos = m.isEnabled ? 'left:1rem' : 'left:0.125rem';
-    return `<div class="grid gap-4 px-6 py-4 items-center hover:bg-surface-container-low/40 transition-colors ${dim}" style="grid-template-columns:2rem 5rem 1fr 3.5rem 4.5rem 6rem;">
+    // Check if duplicate exists (same pattern+method, different id)
+    const hasDup = S.mocks.filter(x => x.urlPattern===m.urlPattern && x.method===m.method).length > 1;
+    const dupBadge = hasDup && m.isEnabled ? '<span class="px-1.5 py-0.5 rounded-sm text-[9px] font-black bg-yellow-500/20 text-yellow-400 border border-yellow-400/30 leading-none" title="Multiple enabled rules match this pattern">DUP</span>' : '';
+    return `<div class="grid gap-4 px-6 py-4 items-center hover:bg-surface-container-low/40 transition-colors ${dim}" style="grid-template-columns:2rem 5rem 1fr 3.5rem 4.5rem 6rem; min-width:480px;">
       <div>
         <div onclick="toggleMock('${m.id}')" style="width:2rem;height:1rem;border-radius:0.5rem;background:${trackBg};position:relative;cursor:pointer;transition:background 0.2s;flex-shrink:0;">
           <div style="position:absolute;top:0.125rem;${thumbPos};width:0.75rem;height:0.75rem;border-radius:50%;background:#fff;transition:left 0.2s;"></div>
         </div>
       </div>
-      <div>${methodBadge(m.method)}</div>
+      <div class="flex items-center gap-1">${methodBadge(m.method)}${dupBadge}</div>
       <div class="font-mono text-sm ${m.isEnabled?'text-secondary':'text-outline italic'} truncate" title="${esc(m.urlPattern)}">${esc(m.urlPattern)}</div>
       <div class="text-center font-mono text-sm ${scColor(sc)}">${sc}</div>
       <div class="text-center font-mono text-xs text-outline">${m.delayMs>0?m.delayMs+'ms':'0ms'}</div>
@@ -635,6 +668,9 @@ function renderRules() {
 // ══════════════════════════════════════════════════
 function openCreateModal(pre={}) {
   S.editId = null;
+  S.dupConfirmed = false;
+  S._dupId = null;
+  document.getElementById('dup-warning').classList.add('hidden');
   document.getElementById('modal-title').textContent = 'Create Mock Rule';
   document.getElementById('modal-icon').textContent = 'add_box';
   document.getElementById('f-id').value      = '';
@@ -652,6 +688,9 @@ function editMock(id) {
   const m = S.mocks.find(x=>x.id===id);
   if (!m) return;
   S.editId = id;
+  S.dupConfirmed = false;
+  S._dupId = null;
+  document.getElementById('dup-warning').classList.add('hidden');
   document.getElementById('modal-title').textContent = 'Edit Mock Rule';
   document.getElementById('modal-icon').textContent = 'edit';
   document.getElementById('f-id').value      = m.id;
@@ -667,7 +706,10 @@ function editMock(id) {
 
 function closeModal() {
   document.getElementById('modal').classList.add('hidden');
+  document.getElementById('dup-warning').classList.add('hidden');
   S.editId = null;
+  S.dupConfirmed = false;
+  S._dupId = null;
 }
 
 async function saveMock(e) {
@@ -684,6 +726,19 @@ async function saveMock(e) {
     responseHeaders: {},
   };
   if (!d.urlPattern) return;
+
+  // Duplicate check — only for new rules, skip if already confirmed
+  if (!S.editId && !S.dupConfirmed) {
+    const dup = S.mocks.find(m => m.urlPattern === d.urlPattern && m.method === d.method);
+    if (dup) {
+      S._dupId = dup.id;
+      document.getElementById('dup-warning').classList.remove('hidden');
+      return;
+    }
+  }
+  S.dupConfirmed = false;
+  document.getElementById('dup-warning').classList.add('hidden');
+
   try {
     if (S.editId) {
       await api.updateMock(S.editId, d);
@@ -697,6 +752,19 @@ async function saveMock(e) {
     closeModal();
     toast(S.editId?'Rule updated':'Rule created');
   } catch(err) { console.error(err); toast('Failed to save rule'); }
+}
+
+function updateExistingDuplicate() {
+  const id = S._dupId;
+  closeModal();
+  if (id) editMock(id);
+}
+
+function createAnyway() {
+  S.dupConfirmed = true;
+  S._dupId = null;
+  document.getElementById('dup-warning').classList.add('hidden');
+  saveMock({ preventDefault: () => {} });
 }
 
 async function deleteMock(id) {
@@ -790,7 +858,7 @@ async function init() {
   api.status().then(s=>{ if(s?.port) document.getElementById('status-port').textContent=`127.0.0.1:${s.port}`; }).catch(()=>{});
 
   document.getElementById('modal').addEventListener('click', e=>{ if(e.target===document.getElementById('modal')) closeModal(); });
-  document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeModal(); });
+  document.addEventListener('keydown', e=>{ if(e.key==='Escape') { closeModal(); closeDetail(); } });
 }
 
 init();
