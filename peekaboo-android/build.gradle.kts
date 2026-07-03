@@ -12,16 +12,15 @@ android {
     }
     kotlinOptions { jvmTarget = "11" }
 }
+kotlin { explicitApi() }
 dependencies {
     api(project(":peekaboo-core"))
-    api(project(":peekaboo-ktor"))
-    implementation(libs.okhttp)
     implementation(libs.ktor.server.core)
     implementation(libs.ktor.server.cio)
     implementation(libs.ktor.server.websockets)
     implementation(libs.ktor.server.content.negotiation)
+    implementation(libs.ktor.server.status.pages)
     implementation(libs.ktor.serialization.gson)
-    implementation(libs.ktor.server.cors)
     implementation(libs.gson)
     implementation(libs.coroutines)
 }

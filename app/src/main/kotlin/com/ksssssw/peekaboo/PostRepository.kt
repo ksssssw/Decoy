@@ -3,6 +3,7 @@ package com.ksssssw.peekaboo
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.request.*
+import io.ktor.client.statement.*
 import io.ktor.http.*
 
 class PostRepository(private val client: HttpClient) {
@@ -20,4 +21,12 @@ class PostRepository(private val client: HttpClient) {
             contentType(ContentType.Application.Json)
             setBody(post)
         }.body()
+
+    /** Hits a path that answers 404 — for error-screen testing. */
+    suspend fun notFound(): Int =
+        client.get("$baseUrl/posts/999999999").status.value
+
+    /** Server-side delayed response — for slow-network testing. */
+    suspend fun delayed(seconds: Int): Int =
+        client.get("https://httpbin.org/delay/$seconds").status.value
 }

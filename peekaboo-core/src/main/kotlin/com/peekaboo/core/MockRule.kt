@@ -1,15 +1,19 @@
 package com.peekaboo.core
 
-import com.google.gson.annotations.SerializedName
-
-data class MockRule(
-    @SerializedName("id") val id: String,
-    @SerializedName("urlPattern") val urlPattern: String,
-    @SerializedName("method") val method: String,
-    @SerializedName("statusCode") val statusCode: Int,
-    @SerializedName("responseBody") val responseBody: String,
-    @SerializedName("responseHeaders") val responseHeaders: Map<String, String> = emptyMap(),
-    @SerializedName("delayMs") val delayMs: Long = 0,
-    @SerializedName("isEnabled") val isEnabled: Boolean = true,
-    @SerializedName("description") val description: String = ""
+public data class MockRule(
+    val id: String,
+    val urlPattern: String,
+    val method: String,
+    val statusCode: Int,
+    val responseBody: String,
+    val responseHeaders: Map<String, String> = emptyMap(),
+    val delayMs: Long = 0,
+    val isEnabled: Boolean = true,
+    val description: String = "",
+    val createdAt: Long = System.currentTimeMillis(),
+    /** Free-form group name (per screen, per test case, …). Empty = ungrouped. */
+    val group: String = "",
 )
+
+/** One entry of the rule layout: which rule sits where, in which group. */
+public data class RulePlacement(val id: String, val group: String)

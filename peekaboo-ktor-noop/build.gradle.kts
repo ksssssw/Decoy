@@ -1,17 +1,16 @@
 plugins {
-    alias(libs.plugins.android.library)
-    alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.kotlin.jvm)
 }
-android {
-    namespace = "com.peekaboo.ktor.noop"
-    compileSdk = 34
-    defaultConfig { minSdk = 24 }
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
-    }
-    kotlinOptions { jvmTarget = "11" }
+java {
+    sourceCompatibility = JavaVersion.VERSION_11
+    targetCompatibility = JavaVersion.VERSION_11
+}
+kotlin {
+    explicitApi()
+    compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11) }
 }
 dependencies {
-    implementation(libs.ktor.client.core)
+    // Ships PeekabooLauncher (returns null) so main-source-set call sites compile in release.
+    api(project(":peekaboo-core"))
+    api(libs.ktor.client.core)
 }

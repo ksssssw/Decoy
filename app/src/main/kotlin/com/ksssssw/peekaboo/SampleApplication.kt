@@ -21,6 +21,7 @@ class SampleApplication : Application() {
 }
 
 val appModule = module {
+    // Ktor stack — Peekaboo hooks in via the client plugin
     single {
         HttpClient(CIO) {
             installPeekaboo()  // debug: captures traffic / release: no-op
@@ -28,4 +29,7 @@ val appModule = module {
         }
     }
     single { PostRepository(get()) }
+
+    // Retrofit stack — Peekaboo hooks in via the OkHttp interceptor
+    single { createRetrofitApi() }
 }

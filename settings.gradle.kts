@@ -23,6 +23,7 @@ rootProject.name = "Peekaboo"
 include(":app")
 include(":peekaboo-core")
 include(":peekaboo-android")
-include(":peekaboo-android-noop")
+include(":peekaboo-okhttp")
+include(":peekaboo-okhttp-noop")
 include(":peekaboo-ktor")
 include(":peekaboo-ktor-noop")

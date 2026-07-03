@@ -12,7 +12,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.peekaboo.android.PeekabooLauncher
+import com.peekaboo.core.PeekabooLauncher
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
@@ -25,9 +25,7 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    SampleScreen(
-                        onOpenInspector = { openInspector() }
-                    )
+                    SampleScreen(onOpenInspector = { openInspector() })
                 }
             }
         }
@@ -41,10 +39,23 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun SampleScreen(onOpenInspector: () -> Unit) {
-    val repository: PostRepository = koinInject()
+    val ktorRepo: PostRepository = koinInject()
+    val retrofitApi: RetrofitPostApi = koinInject()
     val scope = rememberCoroutineScope()
     var result by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
+
+    fun run(label: String, block: suspend () -> String) {
+        scope.launch {
+            isLoading = true
+            result = runCatching { block() }
+                .fold(
+                    onSuccess = { "$label → $it" },
+                    onFailure = { "$label → Error: ${it.message}" }
+                )
+            isLoading = false
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -54,74 +65,42 @@ fun SampleScreen(onOpenInspector: () -> Unit) {
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Text(
-            text = "Network Inspector Sample",
+            text = "Peekaboo Sample",
             style = MaterialTheme.typography.headlineSmall
         )
 
-        Spacer(modifier = Modifier.height(8.dp))
+        InspectorCard(onOpenInspector)
 
-        Button(
-            onClick = {
-                scope.launch {
-                    isLoading = true
-                    result = runCatching { repository.getPosts() }
-                        .fold(
-                            onSuccess = { "Fetched ${it.size} posts" },
-                            onFailure = { "Error: ${it.message}" }
-                        )
-                    isLoading = false
-                }
-            },
-            modifier = Modifier.fillMaxWidth(),
-            enabled = !isLoading
-        ) {
-            Text("GET /posts")
+        SectionLabel("Retrofit (OkHttp Interceptor)")
+        ScenarioButton("GET /posts", isLoading) {
+            run("Retrofit GET") { "${retrofitApi.getPosts().size} posts" }
+        }
+        ScenarioButton("POST /posts (request body)", isLoading) {
+            run("Retrofit POST") {
+                "created id=${retrofitApi.createPost(Post(title = "Hello", body = "from Retrofit", userId = 1)).id}"
+            }
+        }
+        ScenarioButton("GET 404", isLoading) {
+            run("Retrofit 404") { retrofitApi.getPost(999_999_999).toString() }
+        }
+        ScenarioButton("GET delay 3s (httpbin)", isLoading) {
+            run("Retrofit delay") { "${retrofitApi.getRaw("https://httpbin.org/delay/3").size} fields" }
         }
 
-        Button(
-            onClick = {
-                scope.launch {
-                    isLoading = true
-                    result = runCatching { repository.getPost(1) }
-                        .fold(
-                            onSuccess = { "Got post: ${it.title}" },
-                            onFailure = { "Error: ${it.message}" }
-                        )
-                    isLoading = false
-                }
-            },
-            modifier = Modifier.fillMaxWidth(),
-            enabled = !isLoading
-        ) {
-            Text("GET /posts/1")
+        SectionLabel("Ktor Client (Plugin)")
+        ScenarioButton("GET /posts", isLoading) {
+            run("Ktor GET") { "${ktorRepo.getPosts().size} posts" }
         }
-
-        Button(
-            onClick = {
-                scope.launch {
-                    isLoading = true
-                    result = runCatching {
-                        repository.createPost(Post(title = "Test Post", body = "Test body", userId = 1))
-                    }.fold(
-                        onSuccess = { "Created: id=${it.id}" },
-                        onFailure = { "Error: ${it.message}" }
-                    )
-                    isLoading = false
-                }
-            },
-            modifier = Modifier.fillMaxWidth(),
-            enabled = !isLoading
-        ) {
-            Text("POST /posts")
+        ScenarioButton("POST /posts (request body)", isLoading) {
+            run("Ktor POST") {
+                "created id=${ktorRepo.createPost(Post(title = "Hello", body = "from Ktor", userId = 1)).id}"
+            }
         }
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        OutlinedButton(
-            onClick = onOpenInspector,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("Open Inspector UI")
+        ScenarioButton("GET 404", isLoading) {
+            run("Ktor 404") { "status ${ktorRepo.notFound()}" }
+        }
+        ScenarioButton("GET delay 3s (httpbin)", isLoading) {
+            run("Ktor delay") { "status ${ktorRepo.delayed(3)}" }
         }
 
         if (isLoading) {
@@ -129,7 +108,7 @@ fun SampleScreen(onOpenInspector: () -> Unit) {
         }
 
         if (result.isNotEmpty()) {
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(4.dp))
             Card(modifier = Modifier.fillMaxWidth()) {
                 Text(
                     text = result,
@@ -138,5 +117,49 @@ fun SampleScreen(onOpenInspector: () -> Unit) {
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun InspectorCard(onOpenInspector: () -> Unit) {
+    val url = PeekabooLauncher.getInspectorUrl()
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            if (url != null) {
+                Text("Inspector: $url", style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    "PC에서 보려면: adb forward tcp:8090 tcp:8090",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                OutlinedButton(onClick = onOpenInspector, modifier = Modifier.fillMaxWidth()) {
+                    Text("Open Inspector in Browser")
+                }
+            } else {
+                Text(
+                    "Peekaboo disabled (release build — no-op)",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SectionLabel(text: String) {
+    Spacer(modifier = Modifier.height(8.dp))
+    Text(text, style = MaterialTheme.typography.titleSmall)
+}
+
+@Composable
+private fun ScenarioButton(text: String, isLoading: Boolean, onClick: () -> Unit) {
+    Button(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        enabled = !isLoading
+    ) {
+        Text(text)
     }
 }

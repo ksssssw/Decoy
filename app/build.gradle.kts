@@ -57,16 +57,21 @@ dependencies {
     implementation(libs.lifecycle.viewmodel.compose)
     debugImplementation(libs.compose.ui.tooling)
 
-    // Peekaboo — debug: real implementation, release: no-op stubs
-    debugImplementation(project(":peekaboo-android"))
-    releaseImplementation(project(":peekaboo-android-noop"))
+    // Peekaboo — 2 lines per HTTP stack. The debug artifact brings the inspector
+    // server + web UI transitively; the no-op twin keeps release call sites compiling.
     debugImplementation(project(":peekaboo-ktor"))
     releaseImplementation(project(":peekaboo-ktor-noop"))
+    debugImplementation(project(":peekaboo-okhttp"))
+    releaseImplementation(project(":peekaboo-okhttp-noop"))
 
     // Ktor client
     implementation(libs.ktor.client.cio)
     implementation(libs.ktor.client.content.negotiation)
     implementation(libs.ktor.serialization.gson)
+
+    // Retrofit (OkHttp)
+    implementation(libs.retrofit)
+    implementation(libs.retrofit.converter.gson)
 
     // Koin
     implementation(libs.koin.android)

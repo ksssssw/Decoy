@@ -3,7 +3,7 @@ plugins {
     alias(libs.plugins.kotlin.android)
 }
 android {
-    namespace = "com.peekaboo.android.noop"
+    namespace = "com.peekaboo.okhttp"
     compileSdk = 34
     defaultConfig { minSdk = 24 }
     compileOptions {
@@ -12,6 +12,10 @@ android {
     }
     kotlinOptions { jvmTarget = "11" }
 }
+kotlin { explicitApi() }
 dependencies {
-    implementation(libs.okhttp)
+    // The adapter pulls in the inspector server + web UI transitively, so apps
+    // only ever declare this single artifact (plus its no-op twin for release).
+    api(project(":peekaboo-android"))
+    api(libs.okhttp)
 }

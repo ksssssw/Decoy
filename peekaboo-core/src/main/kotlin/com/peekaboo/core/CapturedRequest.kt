@@ -1,19 +1,17 @@
 package com.peekaboo.core
 
-import com.google.gson.annotations.SerializedName
-
-data class CapturedRequest(
-    @SerializedName("id") val id: String,
-    @SerializedName("timestamp") val timestamp: Long,
-    @SerializedName("method") val method: String,
-    @SerializedName("url") val url: String,
-    @SerializedName("requestHeaders") val requestHeaders: Map<String, String>,
-    @SerializedName("requestBody") val requestBody: String?,
-    @SerializedName("responseCode") val responseCode: Int?,
-    @SerializedName("responseHeaders") val responseHeaders: Map<String, String>,
-    @SerializedName("responseBody") val responseBody: String?,
-    @SerializedName("durationMs") val durationMs: Long,
-    @SerializedName("isMocked") val isMocked: Boolean = false,
-    @SerializedName("error") val error: String? = null,
-    @SerializedName("bodyTruncated") val bodyTruncated: Boolean = false
+public data class CapturedRequest(
+    val id: String,
+    val timestamp: Long,
+    val method: String,
+    val url: String,
+    val requestHeaders: Map<String, String>,
+    val requestBody: String?,
+    val responseCode: Int?,
+    val responseHeaders: Map<String, String>,
+    val responseBody: String?,
+    val durationMs: Long,
+    val isMocked: Boolean = false,
+    val error: String? = null,
+    val bodyTruncated: Boolean = false,
 )

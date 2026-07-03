@@ -12,7 +12,10 @@ android {
     }
     kotlinOptions { jvmTarget = "11" }
 }
+kotlin { explicitApi() }
 dependencies {
-    implementation(project(":peekaboo-core"))
-    implementation(libs.ktor.client.core)
+    // The adapter pulls in the inspector server + web UI transitively, so apps
+    // only ever declare this single artifact (plus its no-op twin for release).
+    api(project(":peekaboo-android"))
+    api(libs.ktor.client.core)
 }

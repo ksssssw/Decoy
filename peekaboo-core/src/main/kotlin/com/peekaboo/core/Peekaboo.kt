@@ -1,9 +1,9 @@
 package com.peekaboo.core
 
-interface Peekaboo {
-    fun getOkHttpInterceptor(): okhttp3.Interceptor
-    fun start(port: Int = 8090)
-    fun stop()
-    fun isRunning(): Boolean
-    fun getPort(): Int
+/** Controls the Peekaboo inspector server lifecycle. Implemented by the runtime artifact. */
+public interface Peekaboo {
+    public fun start(port: Int = 8090)
+    public fun stop()
+    public fun isRunning(): Boolean
+    public fun getPort(): Int
 }

@@ -1,5 +1,3 @@
-@file:OptIn(io.ktor.util.InternalAPI::class)
-
 package com.peekaboo.ktor
 
 import com.peekaboo.core.CapturedRequest
@@ -7,28 +5,26 @@ import com.peekaboo.core.MockRepository
 import com.peekaboo.core.NetworkStore
 import com.peekaboo.core.PeekabooProvider
 import io.ktor.client.HttpClientConfig
-import io.ktor.client.call.HttpClientCall
 import io.ktor.client.plugins.HttpSend
+import io.ktor.client.plugins.api.ClientPlugin
 import io.ktor.client.plugins.api.createClientPlugin
 import io.ktor.client.plugins.plugin
 import io.ktor.client.statement.HttpResponseContainer
 import io.ktor.client.statement.HttpResponsePipeline
-import io.ktor.http.Headers
-import io.ktor.http.HttpHeaders
-import io.ktor.http.HttpProtocolVersion
-import io.ktor.http.HttpStatusCode
+import io.ktor.http.content.OutgoingContent
+import io.ktor.http.content.TextContent
 import io.ktor.util.AttributeKey
-import io.ktor.util.date.GMTDate
 import io.ktor.utils.io.ByteReadChannel
 import io.ktor.utils.io.core.readBytes
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import java.util.UUID
 
 private val PeekabooStartTime = AttributeKey<Long>("PeekabooStartTime")
 private val PeekabooRequestId = AttributeKey<String>("PeekabooRequestId")
 private val PeekabooIsMocked = AttributeKey<Boolean>("PeekabooIsMocked")
+private val PeekabooRequestBody = AttributeKey<String>("PeekabooRequestBody")
+
+private const val BODY_LIMIT = 1024 * 1024 // 1MB
 
 /**
  * Ktor client plugin that captures HTTP requests/responses into Peekaboo's NetworkStore
@@ -42,7 +38,7 @@ private val PeekabooIsMocked = AttributeKey<Boolean>("PeekabooIsMocked")
  * }
  * ```
  */
-val PeekabooKtorPlugin = createClientPlugin("PeekabooPlugin") {
+public val PeekabooKtorPlugin: ClientPlugin<Unit> = createClientPlugin("PeekabooPlugin") {
 
     onRequest { request, _ ->
         request.attributes.put(PeekabooStartTime, System.currentTimeMillis())
@@ -55,6 +51,12 @@ val PeekabooKtorPlugin = createClientPlugin("PeekabooPlugin") {
     client.plugin(HttpSend).intercept { requestBuilder ->
         if (!PeekabooProvider.isInitialized() || !PeekabooProvider.instance.isRunning()) {
             return@intercept execute(requestBuilder)
+        }
+
+        // ContentNegotiation has already turned the body into OutgoingContent here —
+        // capture it once so both the mock path and the response pipeline can log it.
+        extractRequestBody(requestBuilder.body)?.let {
+            requestBuilder.attributes.put(PeekabooRequestBody, it)
         }
 
         val url = requestBuilder.url.buildString()
@@ -73,18 +75,6 @@ val PeekabooKtorPlugin = createClientPlugin("PeekabooPlugin") {
             requestBuilder.attributes.put(PeekabooIsMocked, true)
 
             val requestData = requestBuilder.build()
-            // Use FQN to prevent the linter from stripping the @InternalAPI import
-            val responseData = io.ktor.client.request.HttpResponseData(
-                statusCode = HttpStatusCode.fromValue(mockRule.statusCode),
-                requestTime = GMTDate(),
-                headers = Headers.build {
-                    append(HttpHeaders.ContentType, "application/json")
-                    mockRule.responseHeaders.forEach { (k, v) -> append(k, v) }
-                },
-                version = HttpProtocolVersion.HTTP_1_1,
-                body = ByteReadChannel(mockRule.responseBody.toByteArray()),
-                callContext = currentCoroutineContext() + Job(currentCoroutineContext()[Job])
-            )
 
             NetworkStore.add(
                 CapturedRequest(
@@ -94,7 +84,7 @@ val PeekabooKtorPlugin = createClientPlugin("PeekabooPlugin") {
                     url = url,
                     requestHeaders = requestData.headers.entries()
                         .associate { it.key to it.value.joinToString(", ") },
-                    requestBody = null,
+                    requestBody = requestBuilder.attributes.getOrNull(PeekabooRequestBody),
                     responseCode = mockRule.statusCode,
                     responseHeaders = mockRule.responseHeaders,
                     responseBody = mockRule.responseBody,
@@ -103,7 +93,7 @@ val PeekabooKtorPlugin = createClientPlugin("PeekabooPlugin") {
                 )
             )
 
-            HttpClientCall(client, requestData, responseData)
+            createMockCall(client, requestData, mockRule)
         } else {
             execute(requestBuilder)
         }
@@ -124,7 +114,7 @@ val PeekabooKtorPlugin = createClientPlugin("PeekabooPlugin") {
 
         // Always read & re-emit so ContentNegotiation can deserialize the body.
         val allBytes = try {
-            (body as ByteReadChannel).readRemaining().readBytes()
+            body.readRemaining().readBytes()
         } catch (_: Exception) {
             ByteArray(0)
         }
@@ -136,10 +126,9 @@ val PeekabooKtorPlugin = createClientPlugin("PeekabooPlugin") {
             val id = req.attributes.getOrNull(PeekabooRequestId)
                 ?: UUID.randomUUID().toString()
             val duration = System.currentTimeMillis() - startTime
-            val bodyLimit = 1_000_000
 
             val bodyText = if (allBytes.isNotEmpty()) {
-                String(allBytes.take(bodyLimit).toByteArray(), Charsets.UTF_8)
+                String(allBytes.take(BODY_LIMIT).toByteArray(), Charsets.UTF_8)
             } else null
 
             NetworkStore.add(
@@ -150,13 +139,13 @@ val PeekabooKtorPlugin = createClientPlugin("PeekabooPlugin") {
                     url = req.url.toString(),
                     requestHeaders = req.headers.entries()
                         .associate { it.key to it.value.joinToString(", ") },
-                    requestBody = null,
+                    requestBody = req.attributes.getOrNull(PeekabooRequestBody),
                     responseCode = context.response.status.value,
                     responseHeaders = context.response.headers.entries()
                         .associate { it.key to it.value.joinToString(", ") },
                     responseBody = bodyText,
                     durationMs = duration,
-                    bodyTruncated = allBytes.size > bodyLimit
+                    bodyTruncated = allBytes.size > BODY_LIMIT
                 )
             )
         }
@@ -166,7 +155,14 @@ val PeekabooKtorPlugin = createClientPlugin("PeekabooPlugin") {
     }
 }
 
+private fun extractRequestBody(body: Any): String? = when (body) {
+    is TextContent -> body.text.take(BODY_LIMIT)
+    is OutgoingContent.ByteArrayContent ->
+        runCatching { String(body.bytes().take(BODY_LIMIT).toByteArray(), Charsets.UTF_8) }.getOrNull()
+    else -> null
+}
+
 /** Installs [PeekabooKtorPlugin] into this [HttpClientConfig]. */
-fun HttpClientConfig<*>.installPeekaboo() {
+public fun HttpClientConfig<*>.installPeekaboo() {
     install(PeekabooKtorPlugin)
 }
