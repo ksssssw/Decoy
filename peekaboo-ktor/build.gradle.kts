@@ -18,4 +18,10 @@ dependencies {
     // only ever declare this single artifact (plus its no-op twin for release).
     api(project(":peekaboo-android"))
     api(libs.ktor.client.core)
+
+    testImplementation(libs.junit)
+    testImplementation(libs.kotlin.test.junit)
+    testImplementation(libs.ktor.client.mock)
+    testImplementation(libs.ktor.client.content.negotiation)
+    testImplementation(libs.ktor.serialization.gson)
 }

@@ -65,8 +65,9 @@ public class PeekabooInterceptor : Interceptor {
                 responseCode = mockRule.statusCode,
                 responseHeaders = mockRule.responseHeaders,
                 responseBody = mockRule.responseBody,
-                durationMs = mockRule.delayMs,
-                isMocked = true
+                durationMs = System.currentTimeMillis() - startTime,
+                isMocked = true,
+                mockDelayMs = mockRule.delayMs
             ))
             return mockResponse
         }

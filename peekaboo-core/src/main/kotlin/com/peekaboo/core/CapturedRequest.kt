@@ -12,6 +12,8 @@ public data class CapturedRequest(
     val responseBody: String?,
     val durationMs: Long,
     val isMocked: Boolean = false,
+    /** Configured artificial delay of the matched mock rule; null for real traffic. */
+    val mockDelayMs: Long? = null,
     val error: String? = null,
     val bodyTruncated: Boolean = false,
 )

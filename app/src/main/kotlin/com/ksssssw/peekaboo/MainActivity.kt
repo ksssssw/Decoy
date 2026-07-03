@@ -83,8 +83,8 @@ fun SampleScreen(onOpenInspector: () -> Unit) {
         ScenarioButton("GET 404", isLoading) {
             run("Retrofit 404") { retrofitApi.getPost(999_999_999).toString() }
         }
-        ScenarioButton("GET delay 3s (httpbin)", isLoading) {
-            run("Retrofit delay") { "${retrofitApi.getRaw("https://httpbin.org/delay/3").size} fields" }
+        ScenarioButton("GET delay 3s (httpbingo)", isLoading) {
+            run("Retrofit delay") { "${retrofitApi.getRaw("https://httpbingo.org/delay/3").size} fields" }
         }
 
         SectionLabel("Ktor Client (Plugin)")
@@ -99,7 +99,7 @@ fun SampleScreen(onOpenInspector: () -> Unit) {
         ScenarioButton("GET 404", isLoading) {
             run("Ktor 404") { "status ${ktorRepo.notFound()}" }
         }
-        ScenarioButton("GET delay 3s (httpbin)", isLoading) {
+        ScenarioButton("GET delay 3s (httpbingo)", isLoading) {
             run("Ktor delay") { "status ${ktorRepo.delayed(3)}" }
         }
 
@@ -131,7 +131,7 @@ private fun InspectorCard(onOpenInspector: () -> Unit) {
             if (url != null) {
                 Text("Inspector: $url", style = MaterialTheme.typography.bodyMedium)
                 Text(
-                    "PC에서 보려면: adb forward tcp:8090 tcp:8090",
+                    "View on PC: adb forward tcp:8090 tcp:8090",
                     style = MaterialTheme.typography.bodySmall
                 )
                 OutlinedButton(onClick = onOpenInspector, modifier = Modifier.fillMaxWidth()) {

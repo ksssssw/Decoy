@@ -18,4 +18,8 @@ dependencies {
     // only ever declare this single artifact (plus its no-op twin for release).
     api(project(":peekaboo-android"))
     api(libs.okhttp)
+
+    testImplementation(libs.junit)
+    testImplementation(libs.kotlin.test.junit)
+    testImplementation(libs.okhttp.mockwebserver)
 }

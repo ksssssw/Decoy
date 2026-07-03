@@ -1,24 +1,26 @@
 # Peekaboo — Android Network Inspector & Mocker
 
+**English** | [한국어](README.ko.md)
+
 A Chucker/LeakCanary-style debug tool for Android. Add **two lines per HTTP stack** and inspect/mock all your app's traffic in a built-in web UI — perfect for reproducing error screens and edge-case data during development and QA.
 
-- 앱의 모든 HTTP 요청/응답을 자동 캡처
-- 웹 UI에서 정규식 URL 패턴으로 **응답 모킹** (상태코드/바디/헤더/지연)
-- 룰 **그룹핑**(화면/테스트케이스 단위) + 그룹·전체 on/off 스위치
-- **드래그 앤 드롭**으로 룰 순서/그룹 이동, 그룹 순서 변경, 그룹 이름 인라인 수정
-- **순서 기반 매칭** — 목록에서 위에 있는 룰이 먼저 적용 (중복 모킹 시 드래그로 우선순위 조정)
-- 룰셋 **Export/Import** — 팀원·디자이너와 JSON 파일로 공유
-- 다크/라이트 테마, 실행 중인 앱 패키지·버전 표시
-- 모킹 룰은 파일로 영속화 — 앱을 재시작해도 순서·그룹까지 유지
-- Retrofit(OkHttp)·Ktor client 모두 지원, DI(Hilt/Koin) 비종속
-- ContentProvider 자동 초기화 — `Application` 코드 수정 불필요
-- **release 빌드에는 서버/인터셉트 코드가 물리적으로 미포함** (no-op 스왑)
+- Automatically captures every HTTP request/response in your app
+- **Mock responses** from the web UI with regex URL patterns (status code / body / headers / delay)
+- Rule **grouping** (per screen / test case) with group and master on/off switches
+- **Drag & drop** to reorder rules, move them between groups, reorder groups, and rename groups inline
+- **Order-based matching** — the topmost rule in the list wins (drag to adjust precedence when rules overlap)
+- Rule set **Export/Import** — share JSON files with teammates and designers; export everything, a single group, or hand-picked rules; **Undo** right after an import
+- Dark/light theme, shows the running app's package & version
+- Mock rules persist to a file — order and groups survive app restarts
+- Supports both Retrofit (OkHttp) and Ktor client; DI-agnostic (Hilt/Koin/manual)
+- ContentProvider auto-init — no `Application` code changes needed
+- **Release builds contain no server/intercept code at all** (no-op swap)
 
 ---
 
 ## Quick Start
 
-### Retrofit / OkHttp 앱
+### Retrofit / OkHttp apps
 
 ```kotlin
 // build.gradle.kts
@@ -28,11 +30,11 @@ releaseImplementation("com.peekaboo:peekaboo-okhttp-noop:<version>")
 
 ```kotlin
 val client = OkHttpClient.Builder()
-    .addInterceptor(PeekabooInterceptor()) // debug: 캡처+모킹 / release: no-op
+    .addInterceptor(PeekabooInterceptor()) // debug: capture+mock / release: no-op
     .build()
 ```
 
-### Ktor client 앱
+### Ktor client apps
 
 ```kotlin
 // build.gradle.kts
@@ -42,32 +44,34 @@ releaseImplementation("com.peekaboo:peekaboo-ktor-noop:<version>")
 
 ```kotlin
 HttpClient(CIO) {
-    installPeekaboo()                      // debug: 캡처+모킹 / release: no-op
-    install(ContentNegotiation) { gson() } // Peekaboo를 ContentNegotiation보다 먼저!
+    installPeekaboo()                      // debug: capture+mock / release: no-op
+    install(ContentNegotiation) { gson() } // install Peekaboo BEFORE ContentNegotiation!
 }
 ```
 
-그게 전부입니다. debug 아티팩트가 인스펙터 서버 + 웹 UI를 함께 가져오고, 앱 실행 시 자동으로 기동됩니다.
+That's it. The debug artifact transitively brings the inspector server + web UI and starts automatically when the app launches.
 
-### 인스펙터 열기
+### Opening the inspector
 
-서버는 기기의 **loopback(127.0.0.1)에만 바인딩**됩니다. 접속 방법:
+The server binds to the device's **loopback (127.0.0.1) only**. To connect:
 
-| 위치 | 방법 |
+| Where | How |
 |---|---|
-| PC 브라우저 (권장) | `adb forward tcp:8090 tcp:8090` → `http://localhost:8090` |
-| 기기 브라우저 | `http://localhost:8090` (또는 `PeekabooLauncher.getInspectorUrl()`로 인텐트 실행) |
+| PC browser (recommended) | `adb forward tcp:8090 tcp:8090` → `http://localhost:8090` |
+| On-device browser | `http://localhost:8090` (or launch an intent via `PeekabooLauncher.getInspectorUrl()`) |
 
-포트 8090이 사용 중이면 8091~8099로 자동 폴백하며, 실제 포트는 Logcat(`Peekaboo` 태그)에 출력됩니다.
+If port 8090 is taken, it automatically falls back to 8091–8099; the actual port is printed to Logcat (tag `Peekaboo`).
 
 ```kotlin
-// 앱에서 인스펙터 URL 얻기 — release에서는 null 반환
+// Get the inspector URL from inside the app — returns null in release
 val url: String? = PeekabooLauncher.getInspectorUrl()
 ```
 
 ---
 
-## DI 연동 예시
+## Integrating into an existing NetworkModule
+
+Real services already have a DI module that owns their HTTP clients. Peekaboo is designed to drop into that module with **one line per stack** — no other structural change. The sample app's [`NetworkModule.kt`](app/src/main/kotlin/com/ksssssw/peekaboo/NetworkModule.kt) demonstrates the full pattern.
 
 ### Hilt
 
@@ -78,7 +82,7 @@ object NetworkModule {
     @Provides @Singleton
     fun provideOkHttpClient(): OkHttpClient =
         OkHttpClient.Builder()
-            .addInterceptor(PeekabooInterceptor())
+            .addInterceptor(PeekabooInterceptor()) // ← the only Peekaboo line
             .build()
 }
 ```
@@ -89,114 +93,128 @@ object NetworkModule {
 val networkModule = module {
     single {
         HttpClient(CIO) {
-            installPeekaboo()
+            installPeekaboo()                      // ← the only Peekaboo line
             install(ContentNegotiation) { gson() }
         }
     }
 }
 ```
 
+### Manual DI / no framework
+
+```kotlin
+object Network {
+    val okHttp: OkHttpClient = OkHttpClient.Builder()
+        .addInterceptor(PeekabooInterceptor())     // ← the only Peekaboo line
+        .build()
+}
+```
+
+Because the `-noop` artifacts expose identical packages and signatures, these call sites compile unchanged in every build type — the debug/release behavior is decided **entirely by the Gradle dependency swap** (`debugImplementation` real / `releaseImplementation` noop). Never use plain `implementation` for the real artifact: that would ship an open-port server in your release build.
+
 ---
 
-## 모듈 구조
+## Module structure
 
 ```
-:peekaboo-okhttp        OkHttp 인터셉터 (서버+웹UI transitively 포함)   ← debugImplementation
-:peekaboo-okhttp-noop   proceed-only 스텁                              ← releaseImplementation
-:peekaboo-ktor          Ktor client 플러그인 (서버+웹UI transitively)  ← debugImplementation
-:peekaboo-ktor-noop     no-op 스텁                                     ← releaseImplementation
-:peekaboo-core          순수 JVM, 의존성 0 — 모델/저장소/Launcher (직접 선언 불필요)
-:peekaboo-android       인스펙터 서버 + 웹 UI + 자동초기화 (직접 선언 불필요)
-:app                    샘플 앱 — Retrofit·Ktor 두 스택 시연
+:peekaboo-okhttp        OkHttp interceptor (brings server+web UI transitively)  ← debugImplementation
+:peekaboo-okhttp-noop   proceed-only stub                                       ← releaseImplementation
+:peekaboo-ktor          Ktor client plugin (brings server+web UI transitively)  ← debugImplementation
+:peekaboo-ktor-noop     no-op stub                                              ← releaseImplementation
+:peekaboo-core          pure JVM, zero deps — models/stores/launcher (no direct declaration needed)
+:peekaboo-android       inspector server + web UI + auto-init (no direct declaration needed)
+:app                    sample app — demonstrates both the Retrofit and Ktor stacks
 ```
 
-no-op 아티팩트는 실제 모듈과 동일한 패키지/시그니처를 제공하므로, `main` 소스셋의 Peekaboo 호출 코드를 그대로 두고 의존성 스왑만으로 release에서 완전히 무력화됩니다.
+The no-op artifacts provide the same packages/signatures as the real modules, so your `main` source set keeps its Peekaboo call sites as-is and the dependency swap alone fully neutralizes them in release.
 
 ## Mock Rules
 
-웹 UI의 **Mock Rules** 탭 또는 Traffic 상세의 **Create Mock from Request** 버튼으로 룰을 만듭니다.
+Create rules in the web UI's **Mock Rules** tab, or from a captured request via **Create Mock from Request** in the Traffic detail view.
 
-| 필드 | 설명 |
+| Field | Description |
 |---|---|
-| URL Pattern | 정규식. URL 일부와 매치되면 적용 (`containsMatchIn`) |
-| Method | GET/POST/… 또는 ANY |
-| Status Code / Body / Headers | 모킹 응답 내용 |
-| Delay | 응답 지연(ms) — 느린 네트워크 재현 |
-| Description | 룰 목록에 표시 — 디자이너/기획자도 알 수 있게 용도를 적어두는 필드 |
-| Group | 화면/테스트케이스 단위 그룹. 그룹 헤더의 스위치로 한꺼번에 on/off |
+| URL Pattern | Regex. Applied when it matches any part of the URL (`containsMatchIn`) |
+| Method | GET/POST/… or ANY |
+| Status Code / Body / Headers | The mocked response content |
+| Delay | Response delay in ms — reproduces slow networks |
+| Description | Shown in the rule list — write it so designers/PMs understand what this mocks |
+| Group | Per-screen / per-test-case group. Toggle a whole group with the switch in its header |
 
-**매칭 우선순위는 목록 순서입니다** — 여러 룰이 같은 요청에 매치되면 목록에서 가장 위의 활성 룰이 적용됩니다(DUP 배지로 표시). 드래그 앤 드롭으로:
+**Matching precedence is list order** — when multiple rules match the same request, the topmost enabled rule wins (flagged with a DUP badge). With drag & drop you can:
 
-- 룰을 위/아래로 끌어 순서 변경, 다른 그룹 위나 그룹 헤더에 놓아 그룹 이동
-- 그룹이 없는 룰 두 개를 겹쳐 놓으면 새 그룹 생성 (이름 바로 입력)
-- 그룹 헤더를 끌어 그룹 간 순서 변경, 연필 아이콘으로 그룹 이름 수정(같은 이름으로 바꾸면 병합)
+- Drag rules up/down to reorder, or drop them onto another group (or its header) to move them
+- Drop two ungrouped rules onto each other to create a new group (name it right away)
+- Drag group headers to reorder groups; rename with the pencil icon (renaming onto an existing name merges)
 
-룰은 `files/peekaboo/rules.json`에 순서·그룹까지 저장되어 앱 재시작 후에도 유지됩니다. 캡처 트래픽은 인메모리(최근 500건)입니다.
+Rules are saved — including order and groups — to `files/peekaboo/rules.json` and survive app restarts. Captured traffic is in-memory (latest 500 entries).
 
-### 룰셋 공유 (Export / Import)
+Mocked calls show a purple duration in the Traffic list. The duration is the **actual elapsed time** (including the configured delay); the detail view additionally shows the configured delay as `Mock Delay`.
 
-Mock Rules 탭의 **Export**로 전체 룰을 JSON 파일로 내려받아 팀원에게 전달하고, 받은 쪽은 **Import**에서 **Merge**(기존 룰 유지+추가) 또는 **Replace**(전체 교체)로 불러옵니다. 파일 포맷은 기기의 `rules.json`과 동일해서 서로 호환됩니다. 잘못된 정규식이 섞여 있으면 해당 룰만 건너뛰고 개수를 알려줍니다.
+### Sharing rule sets (Export / Import)
+
+Use **Export** in the Mock Rules tab to download rules as a JSON file — either everything, or a subset picked in the export dialog's checkbox tree. Each group header also has a quick per-group export button. On the receiving side, **Import** offers **Merge** (keep current rules, add imported) or **Replace** (wipe first). Right after an import, an **Undo** button in the toast restores the pre-import state — until the next rule change. The file format is identical to the on-device `rules.json`, so they're interchangeable. Rules with invalid regexes are skipped individually and counted.
 
 ## REST API
 
-웹 UI가 사용하는 API는 직접 호출할 수도 있습니다 (CI에서 룰 주입 등).
+The API used by the web UI can also be called directly (e.g. injecting rules from CI).
 
-| Method | Path | 설명 |
+| Method | Path | Description |
 |---|---|---|
-| GET | `/api/calls` | 캡처된 요청 목록 |
-| GET | `/api/calls/{id}` | 단건 조회 |
-| DELETE | `/api/calls` | 캡처 초기화 |
-| GET / POST | `/api/mocks` | 룰 목록 / 생성 (잘못된 정규식은 400) |
-| PUT / DELETE | `/api/mocks/{id}` | 룰 수정 / 삭제 |
-| PATCH | `/api/mocks/{id}/toggle` | 룰 활성 토글 |
-| PATCH | `/api/mocks/group/toggle` | 그룹 전체 on/off — `{"group":"...","isEnabled":true}` |
-| PATCH | `/api/mocks/group/rename` | 그룹 이름 변경 — `{"from":"...","to":"..."}` (기존 이름과 같으면 병합) |
-| PATCH | `/api/mocks/all/toggle` | 모든 룰 on/off — `{"isEnabled":false}` |
-| PUT | `/api/mocks/layout` | 전체 순서·그룹 배치 저장 — `{"items":[{"id":"...","group":"..."},…]}` (순서 = 매칭 우선순위) |
-| POST | `/api/mocks/import` | 룰 일괄 추가 — `{"mode":"merge"\|"replace","rules":[…]}` |
-| GET | `/api/status` | 서버 상태 + 호스트 앱 정보(패키지명/버전/기기) |
-| WS | `/ws` | 신규 캡처 실시간 push |
+| GET | `/api/calls` | List captured requests |
+| GET | `/api/calls/{id}` | Get one request |
+| DELETE | `/api/calls` | Clear captures |
+| GET / POST | `/api/mocks` | List / create rules (invalid regex → 400) |
+| PUT / DELETE | `/api/mocks/{id}` | Update / delete a rule |
+| PATCH | `/api/mocks/{id}/toggle` | Toggle a rule |
+| PATCH | `/api/mocks/group/toggle` | Toggle a whole group — `{"group":"...","isEnabled":true}` |
+| PATCH | `/api/mocks/group/rename` | Rename a group — `{"from":"...","to":"..."}` (merges if the target name exists) |
+| PATCH | `/api/mocks/all/toggle` | Toggle all rules — `{"isEnabled":false}` |
+| PUT | `/api/mocks/layout` | Save the full order/group layout — `{"items":[{"id":"...","group":"..."},…]}` (order = matching precedence) |
+| POST | `/api/mocks/import` | Bulk-add rules — `{"mode":"merge"\|"replace","rules":[…]}` |
+| GET | `/api/status` | Server status + host app info (package/version/device) |
+| WS | `/ws` | Real-time push of new captures |
 
 ---
 
-## 보안
+## Security
 
-- 서버는 **127.0.0.1에만 바인딩** — 같은 Wi-Fi의 다른 기기에서는 접근할 수 없습니다. PC 접속은 `adb forward`(USB/adb 권한 필요)를 통해서만 가능합니다.
-- release 빌드는 no-op 아티팩트만 포함하므로 서버·인터셉트 코드가 APK에 존재하지 않습니다.
-- 남는 위협 모델: **같은 기기에 설치된 다른 앱**이 debug 빌드의 로컬 포트에 접근할 수 있습니다(Chucker 등 동종 도구와 동일). 민감한 트래픽을 다루는 앱이라면 debug 빌드 배포 범위에 유의하세요.
-- 절대 `implementation`으로 (모든 빌드타입에) 실제 아티팩트를 넣지 마세요 — release에 오픈 포트 서버가 포함됩니다.
+- The server binds to **127.0.0.1 only** — other devices on the same Wi-Fi cannot reach it. PC access works only through `adb forward` (requires USB/adb authorization).
+- Release builds include only the no-op artifacts, so no server/intercept code exists in the APK.
+- Residual threat model: **another app installed on the same device** could reach the debug build's local port (same as Chucker and similar tools). If your app handles sensitive traffic, be mindful of who receives debug builds.
+- Never add the real artifact with `implementation` (all build types) — your release would ship an open-port server.
 
-### release에 Peekaboo가 없는지 검증하기
+### Verifying release builds contain no Peekaboo
 
 ```bash
 ./gradlew :app:assembleRelease
 
-# 1) dex에 서버 클래스가 없어야 함 (core 모델 + 스텁만 존재)
-$ANDROID_HOME/build-tools/<ver>/dexdump app-release.apk의 classes.dex | grep "com/peekaboo"
-#   → com/peekaboo/core/*, com/peekaboo/okhttp/PeekabooInterceptor(스텁)만 출력
-#   → com/peekaboo/android/*, io/ktor/server/* 는 없어야 함
+# 1) The dex must contain no server classes (only core models + stubs)
+$ANDROID_HOME/build-tools/<ver>/dexdump classes.dex from app-release.apk | grep "com/peekaboo"
+#   → only com/peekaboo/core/* and com/peekaboo/okhttp/PeekabooInterceptor (stub) should appear
+#   → com/peekaboo/android/* and io/ktor/server/* must be absent
 
-# 2) 설치 후 리스닝 포트가 없어야 함 (8090 = 0x1F9A)
-adb shell "cat /proc/net/tcp | grep 1F9A"   # 출력 없음이 정상
+# 2) No listening port after install (8090 = 0x1F9A)
+adb shell "cat /proc/net/tcp | grep 1F9A"   # no output is correct
 ```
 
 ---
 
-## 샘플 앱
+## Sample app
 
-`:app` 모듈이 Retrofit(OkHttp)과 Ktor client 두 경로를 한 화면에서 시연합니다.
+The `:app` module demonstrates both the Retrofit (OkHttp) and Ktor client paths on one screen.
 
-1. `./gradlew :app:installDebug` 후 실행
-2. `adb forward tcp:8090 tcp:8090` → PC 브라우저에서 `http://localhost:8090`
-3. GET/POST/404/지연 버튼을 눌러 트래픽 확인
-4. Mock Rules에서 룰 생성(예: `/posts`에 500 + 3000ms) → 앱에서 다시 호출 → 에러/지연 동작 확인
-5. 앱을 강제 종료 후 재실행해도 룰이 유지되는지 확인
+1. `./gradlew :app:installDebug` and launch
+2. `adb forward tcp:8090 tcp:8090` → open `http://localhost:8090` on your PC
+3. Press the GET/POST/404/delay buttons and watch the traffic
+4. Create a rule in Mock Rules (e.g. `/posts` with 500 + 3000ms) → call again from the app → verify the error/delay behavior
+5. Force-stop and relaunch the app — the rules should survive
 
 ## Roadmap
 
-- 서버사이드 request replay (앱의 실제 클라이언트 설정을 태우는 재요청)
-- Ktor 3.x 지원 (`MockCallFactory`의 InternalAPI 의존 제거)
-- Maven Central 배포
+- Server-side request replay (re-issuing requests through the app's real client configuration)
+- Ktor 3.x support (removing `MockCallFactory`'s InternalAPI dependency)
+- Maven Central publication
 
 ## License
 

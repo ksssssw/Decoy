@@ -1,14 +1,13 @@
 package com.peekaboo.android
 
-import android.content.Context
 import com.google.gson.Gson
 import com.peekaboo.core.MockRule
 import com.peekaboo.core.RuleStorage
 import java.io.File
 
-internal class FileRuleStorage(context: Context) : RuleStorage {
+internal class FileRuleStorage(filesDir: File) : RuleStorage {
     private val gson = Gson()
-    private val file = File(context.filesDir, "peekaboo/rules.json")
+    private val file = File(filesDir, "peekaboo/rules.json")
 
     override fun load(): List<MockRule> {
         if (!file.exists()) return emptyList()

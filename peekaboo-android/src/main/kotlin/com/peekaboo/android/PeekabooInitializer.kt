@@ -12,7 +12,7 @@ public class PeekabooInitializer : ContentProvider() {
         // A dev tool must never crash the host app — fail quietly and log instead.
         runCatching {
             val appContext = context!!
-            MockRepository.attachStorage(FileRuleStorage(appContext))
+            MockRepository.attachStorage(FileRuleStorage(appContext.filesDir))
             val peekaboo = RealPeekaboo(PeekabooServer(loadAppInfo()))
             peekaboo.start()
             PeekabooProvider.instance = peekaboo

@@ -226,6 +226,7 @@ main { display: flex; flex-direction: column; height: 100vh; padding-top: 52px; 
 .m-any    { background: var(--surface-3); color: var(--muted); border: 1px solid var(--border-strong); }
 .tag { display: inline-block; padding: 2px 5px; border-radius: 3px; font-size: 9px; font-weight: 800; line-height: 1.4; }
 .tag-mock { background: var(--purple); color: #fff; }
+.dur-mock { color: color-mix(in srgb, var(--purple) 55%, var(--text)); font-weight: 700; }
 .tag-err  { background: color-mix(in srgb, var(--red) 55%, transparent); color: #fff; }
 .tag-dup  { background: color-mix(in srgb, var(--yellow) 15%, transparent); color: var(--yellow); border: 1px solid color-mix(in srgb, var(--yellow) 35%, transparent); }
 .sc-2xx { color: var(--green); }
@@ -295,9 +296,9 @@ main { display: flex; flex-direction: column; height: 100vh; padding-top: 52px; 
   border: 1px solid var(--primary-strong); border-radius: 3px; padding: 2px 6px; outline: none;
   font-family: inherit; width: 180px;
 }
-.group-head .rename-btn { display: flex; color: var(--muted); opacity: 0; transition: opacity .15s, color .15s; padding: 2px; }
-.group-head:hover .rename-btn { opacity: .8; }
-.group-head .rename-btn:hover { color: var(--primary); }
+.group-head .rename-btn, .group-head .gexport-btn { display: flex; color: var(--muted); opacity: 0; transition: opacity .15s, color .15s; padding: 2px; }
+.group-head:hover .rename-btn, .group-head:hover .gexport-btn { opacity: .8; }
+.group-head .rename-btn:hover, .group-head .gexport-btn:hover { color: var(--primary); }
 .group-head .gmeta { font-family: var(--mono); font-size: 10px; color: var(--muted); white-space: nowrap; }
 .group-head .spacer { flex: 1; }
 
@@ -360,7 +361,18 @@ main { display: flex; flex-direction: column; height: 100vh; padding-top: 52px; 
   box-shadow: 0 4px 16px var(--shadow); animation: toastin .18s ease-out;
 }
 #toast.hidden { display: none; }
+#toast.action { pointer-events: auto; }
+#toast .toast-btn { font-family: var(--mono); font-size: 12px; font-weight: 700; color: var(--primary); margin-left: 12px; }
+#toast .toast-btn:hover { text-decoration: underline; }
 @keyframes toastin { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+/* ── Export modal tree ───────────────────────────────────── */
+.export-tree { display: flex; flex-direction: column; max-height: 50vh; overflow-y: auto; border: 1px solid var(--border); border-radius: 4px; background: var(--bg-lowest); }
+.export-tree input[type=checkbox] { accent-color: var(--primary-strong); flex-shrink: 0; }
+.export-group { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: var(--surface-2); border-bottom: 1px solid var(--border); font-size: 12px; font-weight: 700; color: var(--text-2); cursor: pointer; user-select: none; }
+.export-rule { display: flex; align-items: center; gap: 8px; padding: 6px 12px 6px 28px; border-bottom: 1px solid var(--surface-2); cursor: pointer; user-select: none; }
+.export-rule:last-child { border-bottom: none; }
+.export-rule .pattern { flex: 1; min-width: 0; font-family: var(--mono); font-size: 11px; color: var(--secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .hidden { display: none !important; }
 
 /* ── Mobile (<768px) ─────────────────────────────────────── */
@@ -451,7 +463,7 @@ main { display: flex; flex-direction: column; height: 100vh; padding-top: 52px; 
             <span>All</span>
             <div id="master-switch" class="switch" onclick="toggleAllRules()" role="switch"><div class="thumb"></div></div>
           </div>
-          <button class="btn btn-outline" onclick="exportRules()" title="Download rules as JSON">
+          <button class="btn btn-outline" onclick="openExportModal()" title="Download all or selected rules as JSON">
             <svg class="icon" viewBox="0 0 24 24"><path d="M12 3v12M12 15l-4-4M12 15l4-4M4 17v3h16v-3"/></svg>Export
           </button>
           <button class="btn btn-outline" onclick="document.getElementById('import-file').click()" title="Import rules from JSON">
@@ -537,7 +549,7 @@ main { display: flex; flex-direction: column; height: 100vh; padding-top: 52px; 
       <div class="form-grid">
         <div class="field">
           <label>Description</label>
-          <input id="f-desc" type="text" placeholder="e.g. 로그인 실패 화면 — 401 응답"/>
+          <input id="f-desc" type="text" placeholder="e.g. Login failure screen — 401 response"/>
           <p class="hint">Shown in the rule list — write it so designers/PMs understand what this mocks.</p>
         </div>
         <div class="field">
@@ -581,6 +593,26 @@ main { display: flex; flex-direction: column; height: 100vh; padding-top: 52px; 
   </div>
 </div>
 
+<!-- ── EXPORT MODAL ── -->
+<div id="export-modal" class="modal-scrim hidden" style="z-index:110;">
+  <div class="modal-card" style="max-width:480px;">
+    <div class="modal-head">
+      <h2>Export Mock Rules</h2>
+      <button class="close" onclick="closeExportModal()"><svg class="icon" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+    </div>
+    <div style="padding:20px;display:flex;flex-direction:column;gap:14px;">
+      <div id="export-tree" class="export-tree"></div>
+      <div class="modal-foot" style="border-top:1px solid var(--border);align-items:center;">
+        <button type="button" class="btn-text" onclick="exportSelectAll(true)">All</button>
+        <button type="button" class="btn-text" onclick="exportSelectAll(false)">None</button>
+        <span style="flex:1;"></span>
+        <button type="button" class="btn-text" onclick="closeExportModal()">Cancel</button>
+        <button type="button" id="export-confirm" class="btn btn-primary" onclick="confirmExport()">Export</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ── STATUS / TOAST ── -->
 <div id="status-box">
   <div id="status-dot"></div>
@@ -609,6 +641,8 @@ const S = {
   collapsed: new Set(), // collapsed group names
   _blocks: [],          // rendered group blocks: [{name, rules:[...]}]
   _importRules: null,   // parsed rules waiting for merge/replace choice
+  _exportSel: null,     // Set of rule ids selected in the export modal
+  _undo: null,          // {rules: [...]} — pre-import snapshot, cleared on next mutation
   _flashId: null,       // newest request id → row flash animation
   _renameGroup: null,   // group name to auto-edit after next render
   drag: null,           // {type:'rule', id} | {type:'block', index}
@@ -696,8 +730,14 @@ async function req(path, opts={}) {
     try { const j = await r.json(); if (j && j.error) msg = j.error; } catch {}
     throw new Error(msg);
   }
+  // Any successful rules mutation invalidates the pending import-undo snapshot
+  if (path.startsWith('/mocks') && (opts.method || 'GET').toUpperCase() !== 'GET') invalidateUndo();
   if (r.status === 204) return null;
   return r.json().catch(()=>null);
+}
+function invalidateUndo() {
+  S._undo = null;
+  if (document.getElementById('toast').classList.contains('action')) dismissToast();
 }
 const api = {
   calls: ()        => req('/calls'),
@@ -804,7 +844,7 @@ function renderList() {
         <span class="status ${scClass(sc)}">${sc ? sc+' '+scText(sc) : r.error ? 'ERROR' : '…'}</span>
       </div>
       <div class="path" title="${esc(r.url)}">${esc(urlPath(r.url))}</div>
-      <div class="row3"><span>${tsFormat(r.timestamp)}</span><span>${durStr(r.durationMs)}</span></div>
+      <div class="row3"><span>${tsFormat(r.timestamp)}</span><span class="${r.isMocked?'dur-mock':''}"${r.isMocked?' title="Mocked response — duration includes the configured delay"':''}>${durStr(r.durationMs)}</span></div>
     </div>`;
   }).join('');
   S._flashId = null;
@@ -848,8 +888,9 @@ function renderDetail() {
     <div class="meta-grid">
       ${metaCell('Status', `<span class="v ${scClass(sc)}">${sc ? sc+' '+scText(sc) : esc(r.error||'Pending')}</span>`)}
       ${metaCell('Timestamp', `<span class="v">${dtFormat(r.timestamp)}</span>`)}
-      ${metaCell('Duration', `<span class="v">${durStr(r.durationMs)}</span>`)}
+      ${metaCell('Duration', `<span class="v${r.isMocked?' dur-mock':''}">${durStr(r.durationMs)}</span>`)}
       ${metaCell('Req / Res Size', `<span class="v">${sizeStr(r.requestBody)} / ${sizeStr(r.responseBody)}</span>`)}
+      ${r.isMocked && r.mockDelayMs != null ? metaCell('Mock Delay', `<span class="v dur-mock">${durStr(r.mockDelayMs)} configured</span>`) : ''}
     </div></div>`;
 
   let body = '';
@@ -998,6 +1039,7 @@ function groupHeader(block, i, showAsGroup) {
     <span class="chev"><svg class="icon" style="width:14px;height:14px;" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></span>
     <span class="gname${block.name?'':' unnamed'}" data-gname="${i}" title="${esc(block.name||'Ungrouped')}">${esc(block.name || 'Ungrouped')}</span>
     ${renameBtn}
+    <button class="gexport-btn" onclick="event.stopPropagation(); exportGroup(${i})" title="Export this group as JSON"><svg class="icon" style="width:13px;height:13px;" viewBox="0 0 24 24"><path d="M12 3v12M12 15l-4-4M12 15l4-4M4 17v3h16v-3"/></svg></button>
     <span class="gmeta">${on}/${block.rules.length} on</span>
     <span class="spacer"></span>
     <div class="switch${swState}" onclick="event.stopPropagation(); toggleGroup(${i})" role="switch" aria-checked="${on===block.rules.length}" title="Toggle whole group"><div class="thumb"></div></div>
@@ -1266,18 +1308,105 @@ function prune(blocks) { return blocks.filter(b => b.rules.length > 0); }
 // ══════════════════════════════════════════════════
 // EXPORT / IMPORT
 // ══════════════════════════════════════════════════
-function exportRules() {
-  if (!S.mocks.length) { toast('No rules to export'); return; }
+function downloadRules(rules, suffix) {
   // Same shape as the on-device rules.json, so files are interchangeable
-  const json = JSON.stringify({version: 1, rules: S.mocks}, null, 2);
+  const json = JSON.stringify({version: 1, rules}, null, 2);
   const d = new Date();
-  const name = `peekaboo-rules-${d.getFullYear()}${pad(d.getMonth()+1,2)}${pad(d.getDate(),2)}.json`;
+  const date = `${d.getFullYear()}${pad(d.getMonth()+1,2)}${pad(d.getDate(),2)}`;
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([json], {type: 'application/json'}));
-  a.download = name;
+  a.download = `peekaboo-rules${suffix ? '-'+suffix : ''}-${date}.json`;
   a.click();
   URL.revokeObjectURL(a.href);
-  toast(`Exported ${S.mocks.length} rule${S.mocks.length!==1?'s':''}`);
+  toast(`Exported ${rules.length} rule${rules.length!==1?'s':''}`);
+}
+
+function slug(name) {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'') || 'group';
+}
+
+function exportGroup(i) {
+  const b = S._blocks[i];
+  if (!b || !b.rules.length) return;
+  downloadRules(b.rules, slug(b.name || 'ungrouped'));
+}
+
+function openExportModal() {
+  if (!S.mocks.length) { toast('No rules to export'); return; }
+  S._exportSel = new Set(S.mocks.map(m => m.id));
+  renderExportTree();
+  document.getElementById('export-modal').classList.remove('hidden');
+}
+
+function closeExportModal() {
+  document.getElementById('export-modal').classList.add('hidden');
+  S._exportSel = null;
+}
+
+function renderExportTree() {
+  const sel = S._exportSel;
+  const blocks = computeBlocks();
+  document.getElementById('export-tree').innerHTML = blocks.map((b, i) => {
+    const n = b.rules.filter(r => sel.has(r.id)).length;
+    const rows = b.rules.map(r => `
+      <label class="export-rule">
+        <input type="checkbox" ${sel.has(r.id)?'checked':''} onchange="exportToggleRule('${r.id}')"/>
+        ${methodBadge(r.method)}
+        <span class="pattern" title="${esc(r.urlPattern)}">${esc(r.urlPattern)}</span>
+      </label>`).join('');
+    return `
+      <label class="export-group">
+        <input type="checkbox" data-egroup="${i}" ${n===b.rules.length?'checked':''} onchange="exportToggleGroup(${i}, this.checked)"/>
+        <span style="flex:1;">${esc(b.name || 'Ungrouped')}</span>
+        <span class="gmeta">${n}/${b.rules.length}</span>
+      </label>${rows}`;
+  }).join('');
+  // Indeterminate state can only be set from JS, not markup
+  blocks.forEach((b, i) => {
+    const cb = document.querySelector(`[data-egroup="${i}"]`);
+    const n = b.rules.filter(r => sel.has(r.id)).length;
+    if (cb) cb.indeterminate = n > 0 && n < b.rules.length;
+  });
+  const btn = document.getElementById('export-confirm');
+  btn.textContent = `Export ${sel.size}`;
+  btn.disabled = sel.size === 0;
+  btn.style.opacity = sel.size === 0 ? .5 : '';
+}
+
+function exportToggleRule(id) {
+  const sel = S._exportSel;
+  sel.has(id) ? sel.delete(id) : sel.add(id);
+  renderExportTree();
+}
+
+function exportToggleGroup(i, on) {
+  const b = computeBlocks()[i];
+  if (!b) return;
+  b.rules.forEach(r => on ? S._exportSel.add(r.id) : S._exportSel.delete(r.id));
+  renderExportTree();
+}
+
+function exportSelectAll(on) {
+  S._exportSel = new Set(on ? S.mocks.map(m => m.id) : []);
+  renderExportTree();
+}
+
+function confirmExport() {
+  const sel = S._exportSel;
+  const rules = S.mocks.filter(m => sel.has(m.id));
+  if (!rules.length) return;
+  let suffix = 'selection';
+  if (rules.length === S.mocks.length) suffix = '';
+  else {
+    // Selection that is exactly one whole group → use the group name in the filename
+    const groups = new Set(rules.map(groupOf));
+    if (groups.size === 1) {
+      const block = computeBlocks().find(b => b.name === [...groups][0]);
+      if (block && block.rules.length === rules.length) suffix = slug(block.name || 'ungrouped');
+    }
+  }
+  closeExportModal();
+  downloadRules(rules, suffix);
 }
 
 function onImportFile(input) {
@@ -1312,15 +1441,32 @@ function closeImportModal() {
 async function doImport(mode) {
   const rules = S._importRules;
   if (!rules) return;
+  const snapshot = S.mocks.map(m => ({...m})); // pre-import state, for Undo
   try {
     const res = await api.importMocks(mode, rules);
     const all = await api.mocks();
     if (all) S.mocks = all;
     renderRules();
     closeImportModal();
+    S._undo = {rules: snapshot};
     toast(`Imported ${res?.imported ?? 0} rule${(res?.imported??0)!==1?'s':''}` +
-      (res?.skipped ? ` (${res.skipped} invalid skipped)` : ''));
+      (res?.skipped ? ` (${res.skipped} invalid skipped)` : ''),
+      {action: 'Undo', onAction: undoImport});
   } catch(err) { toast('Import failed: ' + err.message); }
+}
+
+/** Restores the pre-import rule set. An empty snapshot correctly clears everything. */
+async function undoImport() {
+  const undo = S._undo;
+  if (!undo) return;
+  try {
+    await api.importMocks('replace', undo.rules);
+    const all = await api.mocks();
+    if (all) S.mocks = all;
+    S._undo = null;
+    renderRules();
+    toast('Import undone');
+  } catch(err) { toast('Undo failed: ' + err.message); }
 }
 
 // ══════════════════════════════════════════════════
@@ -1484,12 +1630,26 @@ function copyAsCurl() {
 // TOAST
 // ══════════════════════════════════════════════════
 let toastTimer;
-function toast(msg) {
+function toast(msg, opts) {
   const el = document.getElementById('toast');
+  clearTimeout(toastTimer);
+  if (opts && opts.action) {
+    // Action toast: clickable, stays until dismissed or superseded
+    el.innerHTML = `${esc(msg)}<button class="toast-btn" id="toast-action">${esc(opts.action)}</button>`;
+    el.classList.add('action');
+    document.getElementById('toast-action').onclick = () => { dismissToast(); opts.onAction(); };
+    el.classList.remove('hidden');
+    return;
+  }
+  el.classList.remove('action');
   el.textContent = msg;
   el.classList.remove('hidden');
-  clearTimeout(toastTimer);
   toastTimer = setTimeout(()=>el.classList.add('hidden'), 2200);
+}
+function dismissToast() {
+  const el = document.getElementById('toast');
+  el.classList.add('hidden');
+  el.classList.remove('action');
 }
 
 // ══════════════════════════════════════════════════
@@ -1526,10 +1686,14 @@ async function init() {
   document.getElementById('import-modal').addEventListener('click', e => {
     if (e.target === document.getElementById('import-modal')) closeImportModal();
   });
+  document.getElementById('export-modal').addEventListener('click', e => {
+    if (e.target === document.getElementById('export-modal')) closeExportModal();
+  });
   document.addEventListener('keydown', e => {
     if (e.key !== 'Escape') return;
     // Modals take precedence — don't also dismiss the detail panel behind them
     if (!document.getElementById('import-modal').classList.contains('hidden')) closeImportModal();
+    else if (!document.getElementById('export-modal').classList.contains('hidden')) closeExportModal();
     else if (!document.getElementById('modal').classList.contains('hidden')) closeModal();
     else closeDetail();
   });

@@ -11,6 +11,10 @@ android {
         targetCompatibility = JavaVersion.VERSION_11
     }
     kotlinOptions { jvmTarget = "11" }
+    testOptions {
+        // android.util.Log is called from JVM unit tests — return defaults instead of throwing
+        unitTests.isReturnDefaultValues = true
+    }
 }
 kotlin { explicitApi() }
 dependencies {
@@ -23,4 +27,8 @@ dependencies {
     implementation(libs.ktor.serialization.gson)
     implementation(libs.gson)
     implementation(libs.coroutines)
+
+    testImplementation(libs.junit)
+    testImplementation(libs.kotlin.test.junit)
+    testImplementation(libs.ktor.server.test.host)
 }

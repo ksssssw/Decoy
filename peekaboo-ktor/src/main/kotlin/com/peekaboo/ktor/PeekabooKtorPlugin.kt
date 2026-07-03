@@ -5,24 +5,25 @@ import com.peekaboo.core.MockRepository
 import com.peekaboo.core.NetworkStore
 import com.peekaboo.core.PeekabooProvider
 import io.ktor.client.HttpClientConfig
+import io.ktor.client.call.HttpClientCall
+import io.ktor.client.call.body
+import io.ktor.client.call.save
 import io.ktor.client.plugins.HttpSend
 import io.ktor.client.plugins.api.ClientPlugin
 import io.ktor.client.plugins.api.createClientPlugin
 import io.ktor.client.plugins.plugin
-import io.ktor.client.statement.HttpResponseContainer
-import io.ktor.client.statement.HttpResponsePipeline
+import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
 import io.ktor.http.content.OutgoingContent
 import io.ktor.http.content.TextContent
+import io.ktor.http.contentLength
+import io.ktor.http.contentType
 import io.ktor.util.AttributeKey
-import io.ktor.utils.io.ByteReadChannel
-import io.ktor.utils.io.core.readBytes
 import kotlinx.coroutines.delay
 import java.util.UUID
 
 private val PeekabooStartTime = AttributeKey<Long>("PeekabooStartTime")
 private val PeekabooRequestId = AttributeKey<String>("PeekabooRequestId")
-private val PeekabooIsMocked = AttributeKey<Boolean>("PeekabooIsMocked")
-private val PeekabooRequestBody = AttributeKey<String>("PeekabooRequestBody")
 
 private const val BODY_LIMIT = 1024 * 1024 // 1MB
 
@@ -37,6 +38,18 @@ private const val BODY_LIMIT = 1024 * 1024 // 1MB
  *     install(ContentNegotiation) { gson() }
  * }
  * ```
+ *
+ * All capture happens in the [HttpSend] chain, so every call is recorded — including
+ * ones whose body is never consumed (e.g. only `.status` is read), non-2xx responses,
+ * and failures (timeouts, connection errors — recorded with [CapturedRequest.error]
+ * set, then rethrown). Response bodies are buffered via [HttpClientCall.save] so
+ * downstream plugins like ContentNegotiation can still deserialize them; event-stream
+ * and binary bodies are skipped with a marker and the original call is returned
+ * untouched to keep streaming intact.
+ *
+ * Note: plugins that re-enter the send chain (e.g. HttpRequestRetry) share the
+ * [HttpSend] interceptor list — whether each retry is captured individually depends
+ * on install order relative to Peekaboo.
  */
 public val PeekabooKtorPlugin: ClientPlugin<Unit> = createClientPlugin("PeekabooPlugin") {
 
@@ -45,34 +58,23 @@ public val PeekabooKtorPlugin: ClientPlugin<Unit> = createClientPlugin("Peekaboo
         request.attributes.put(PeekabooRequestId, UUID.randomUUID().toString())
     }
 
-    // Mock interception — runs before the engine sends the request.
-    // If a matching MockRule exists, a fake HttpClientCall is returned immediately
-    // without touching the network.
     client.plugin(HttpSend).intercept { requestBuilder ->
         if (!PeekabooProvider.isInitialized() || !PeekabooProvider.instance.isRunning()) {
             return@intercept execute(requestBuilder)
         }
 
-        // ContentNegotiation has already turned the body into OutgoingContent here —
-        // capture it once so both the mock path and the response pipeline can log it.
-        extractRequestBody(requestBuilder.body)?.let {
-            requestBuilder.attributes.put(PeekabooRequestBody, it)
-        }
-
+        // ContentNegotiation has already turned the body into OutgoingContent here.
+        val requestBody = extractRequestBody(requestBuilder.body)
         val url = requestBuilder.url.buildString()
         val method = requestBuilder.method.value
-        val mockRule = MockRepository.findMatchingRule(url, method)
+        val startTime = requestBuilder.attributes.getOrNull(PeekabooStartTime)
+            ?: System.currentTimeMillis()
+        val id = requestBuilder.attributes.getOrNull(PeekabooRequestId)
+            ?: UUID.randomUUID().toString()
 
+        val mockRule = MockRepository.findMatchingRule(url, method)
         if (mockRule != null) {
             if (mockRule.delayMs > 0) delay(mockRule.delayMs)
-
-            val startTime = requestBuilder.attributes.getOrNull(PeekabooStartTime)
-                ?: System.currentTimeMillis()
-            val id = requestBuilder.attributes.getOrNull(PeekabooRequestId)
-                ?: UUID.randomUUID().toString()
-
-            // Mark so the response pipeline skips double-capturing this call.
-            requestBuilder.attributes.put(PeekabooIsMocked, true)
 
             val requestData = requestBuilder.build()
 
@@ -84,75 +86,117 @@ public val PeekabooKtorPlugin: ClientPlugin<Unit> = createClientPlugin("Peekaboo
                     url = url,
                     requestHeaders = requestData.headers.entries()
                         .associate { it.key to it.value.joinToString(", ") },
-                    requestBody = requestBuilder.attributes.getOrNull(PeekabooRequestBody),
+                    requestBody = requestBody,
                     responseCode = mockRule.statusCode,
                     responseHeaders = mockRule.responseHeaders,
                     responseBody = mockRule.responseBody,
-                    durationMs = mockRule.delayMs,
-                    isMocked = true
+                    durationMs = System.currentTimeMillis() - startTime,
+                    isMocked = true,
+                    mockDelayMs = mockRule.delayMs
                 )
             )
 
             createMockCall(client, requestData, mockRule)
         } else {
-            execute(requestBuilder)
-        }
-    }
-
-    // Response capture — runs after the engine receives a real response.
-    // Intercept at Receive phase, BEFORE Transform (where ContentNegotiation deserializes).
-    client.responsePipeline.intercept(HttpResponsePipeline.Receive) {
-        val container = subject as? HttpResponseContainer ?: return@intercept
-        val (info, body) = container
-        if (body !is ByteReadChannel) return@intercept
-
-        if (!PeekabooProvider.isInitialized() || !PeekabooProvider.instance.isRunning()) {
-            return@intercept
-        }
-
-        val req = context.request
-
-        // Always read & re-emit so ContentNegotiation can deserialize the body.
-        val allBytes = try {
-            body.readRemaining().readBytes()
-        } catch (_: Exception) {
-            ByteArray(0)
-        }
-
-        // Mocked calls are already captured in the HttpSend interceptor above.
-        if (req.attributes.getOrNull(PeekabooIsMocked) != true) {
-            val startTime = req.attributes.getOrNull(PeekabooStartTime)
-                ?: System.currentTimeMillis()
-            val id = req.attributes.getOrNull(PeekabooRequestId)
-                ?: UUID.randomUUID().toString()
-            val duration = System.currentTimeMillis() - startTime
-
-            val bodyText = if (allBytes.isNotEmpty()) {
-                String(allBytes.take(BODY_LIMIT).toByteArray(), Charsets.UTF_8)
-            } else null
-
-            NetworkStore.add(
-                CapturedRequest(
-                    id = id,
-                    timestamp = startTime,
-                    method = req.method.value,
-                    url = req.url.toString(),
-                    requestHeaders = req.headers.entries()
-                        .associate { it.key to it.value.joinToString(", ") },
-                    requestBody = req.attributes.getOrNull(PeekabooRequestBody),
-                    responseCode = context.response.status.value,
-                    responseHeaders = context.response.headers.entries()
-                        .associate { it.key to it.value.joinToString(", ") },
-                    responseBody = bodyText,
-                    durationMs = duration,
-                    bodyTruncated = allBytes.size > BODY_LIMIT
+            val call = try {
+                execute(requestBuilder)
+            } catch (t: Throwable) {
+                NetworkStore.add(
+                    CapturedRequest(
+                        id = id,
+                        timestamp = startTime,
+                        method = method,
+                        url = url,
+                        requestHeaders = requestBuilder.headers.entries()
+                            .associate { it.key to it.value.joinToString(", ") },
+                        requestBody = requestBody,
+                        responseCode = null,
+                        responseHeaders = emptyMap(),
+                        responseBody = null,
+                        durationMs = System.currentTimeMillis() - startTime,
+                        error = t.message ?: t::class.simpleName ?: "Error"
+                    )
                 )
-            )
+                throw t
+            }
+            captureRealCall(call, id, startTime, requestBody)
         }
-
-        // Re-emit the same bytes so ContentNegotiation (Transform phase) can deserialize them.
-        proceedWith(HttpResponseContainer(info, ByteReadChannel(allBytes)))
     }
+}
+
+/**
+ * Records a real (non-mocked) call. Returns the call the downstream caller should
+ * use: a [save]d replayable call when the body was buffered for capture, or the
+ * untouched original when the body must keep streaming (event-stream / binary).
+ */
+private suspend fun captureRealCall(
+    call: HttpClientCall,
+    id: String,
+    startTime: Long,
+    requestBody: String?,
+): HttpClientCall {
+    val response = call.response
+    val contentType = response.contentType()
+
+    fun record(bodyText: String?, truncated: Boolean = false) {
+        NetworkStore.add(
+            CapturedRequest(
+                id = id,
+                timestamp = startTime,
+                method = call.request.method.value,
+                url = call.request.url.toString(),
+                requestHeaders = call.request.headers.entries()
+                    .associate { it.key to it.value.joinToString(", ") },
+                requestBody = requestBody,
+                responseCode = response.status.value,
+                responseHeaders = response.headers.entries()
+                    .associate { it.key to it.value.joinToString(", ") },
+                responseBody = bodyText,
+                durationMs = System.currentTimeMillis() - startTime,
+                bodyTruncated = truncated
+            )
+        )
+    }
+
+    if (contentType?.match(ContentType.Text.EventStream) == true) {
+        record("[skipped: event-stream]")
+        return call
+    }
+    // Without the ContentEncoding plugin the client hands us still-compressed bytes.
+    val encoding = response.headers[HttpHeaders.ContentEncoding]
+    if (encoding != null && !encoding.equals("identity", ignoreCase = true)) {
+        record("[skipped: content-encoding $encoding]")
+        return call
+    }
+    if (!isTextLike(contentType)) {
+        val size = response.contentLength()
+        record("[binary body: ${size?.let { "$it bytes" } ?: "unknown size"}]")
+        return call
+    }
+
+    val saved = try {
+        call.save()
+    } catch (e: Exception) {
+        record("[unreadable body: ${e.message}]")
+        return call
+    }
+    val bytes: ByteArray = saved.response.body()
+    val truncated = bytes.size > BODY_LIMIT
+    val text = when {
+        bytes.isEmpty() -> null
+        truncated -> String(bytes.copyOf(BODY_LIMIT), Charsets.UTF_8)
+        else -> String(bytes, Charsets.UTF_8)
+    }
+    record(text, truncated)
+    return saved
+}
+
+private fun isTextLike(contentType: ContentType?): Boolean {
+    val type = contentType ?: return true // unknown — attempt capture
+    if (type.contentType == "text") return true
+    val subtype = type.contentSubtype.lowercase()
+    return subtype.contains("json") || subtype.contains("xml") ||
+        subtype.contains("javascript") || subtype == "x-www-form-urlencoded"
 }
 
 private fun extractRequestBody(body: Any): String? = when (body) {

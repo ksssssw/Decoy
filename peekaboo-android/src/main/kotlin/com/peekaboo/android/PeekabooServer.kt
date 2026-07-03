@@ -75,8 +75,6 @@ internal data class MockRuleDto(
 
 internal class PeekabooServer(private val appInfo: AppInfo) {
     private var engine: ApplicationEngine? = null
-    private val gson = Gson()
-    private val activeSessions = CopyOnWriteArrayList<DefaultWebSocketSession>()
 
     /**
      * Starts the inspector server bound to loopback only — never reachable from
@@ -86,165 +84,9 @@ internal class PeekabooServer(private val appInfo: AppInfo) {
     fun start(preferredPort: Int = 8090): Int {
         val port = findAvailablePort(preferredPort)
         engine = embeddedServer(CIO, host = "127.0.0.1", port = port) {
-            install(ContentNegotiation) { gson() }
-            install(WebSockets)
-            install(StatusPages) {
-                // Ktor logs through SLF4J, which is a no-op on Android — surface
-                // API errors in Logcat and in the response body instead.
-                exception<Throwable> { call, cause ->
-                    android.util.Log.e("Peekaboo", "Inspector API error: ${call.request.uri}", cause)
-                    call.respond(
-                        HttpStatusCode.InternalServerError,
-                        mapOf("error" to (cause.message ?: cause.toString()))
-                    )
-                }
-            }
-
-            routing {
-                // Web UI served from classpath resources under web/
-                staticResources("/", "web") {
-                    default("index.html")
-                }
-
-                // REST API
-                route("/api") {
-                    get("/calls") {
-                        call.respond(NetworkStore.getAll())
-                    }
-
-                    get("/calls/{id}") {
-                        val found = NetworkStore.getById(call.parameters["id"]!!)
-                        if (found != null) call.respond(found)
-                        else call.respond(HttpStatusCode.NotFound, mapOf("error" to "Not found"))
-                    }
-
-                    delete("/calls") {
-                        NetworkStore.clear()
-                        call.respond(HttpStatusCode.OK, mapOf("status" to "cleared"))
-                    }
-
-                    get("/mocks") {
-                        call.respond(MockRepository.getRules())
-                    }
-
-                    post("/mocks") {
-                        val rule = call.receive<MockRuleDto>().toRule()
-                        val regexError = validatePattern(rule.urlPattern)
-                        if (regexError != null) {
-                            call.respond(HttpStatusCode.BadRequest, mapOf("error" to regexError))
-                            return@post
-                        }
-                        val withId = rule.copy(id = UUID.randomUUID().toString())
-                        MockRepository.addRule(withId)
-                        call.respond(HttpStatusCode.Created, withId)
-                    }
-
-                    put("/mocks/{id}") {
-                        val updated = call.receive<MockRuleDto>().toRule()
-                        val regexError = validatePattern(updated.urlPattern)
-                        if (regexError != null) {
-                            call.respond(HttpStatusCode.BadRequest, mapOf("error" to regexError))
-                            return@put
-                        }
-                        MockRepository.updateRule(updated.copy(id = call.parameters["id"]!!))
-                        call.respond(HttpStatusCode.OK)
-                    }
-
-                    delete("/mocks/{id}") {
-                        MockRepository.removeRule(call.parameters["id"]!!)
-                        call.respond(HttpStatusCode.OK)
-                    }
-
-                    patch("/mocks/{id}/toggle") {
-                        MockRepository.toggleRule(call.parameters["id"]!!)
-                        call.respond(HttpStatusCode.OK)
-                    }
-
-                    // Constant segments outrank {id} in Ktor routing, so these
-                    // never collide with /mocks/{id}/... (rule ids are UUIDs anyway).
-                    patch("/mocks/group/toggle") {
-                        val body = call.receive<GroupToggleRequest>()
-                        MockRepository.setGroupEnabled(body.group ?: "", body.isEnabled ?: false)
-                        call.respond(HttpStatusCode.OK)
-                    }
-
-                    patch("/mocks/all/toggle") {
-                        val body = call.receive<GroupToggleRequest>()
-                        MockRepository.setAllEnabled(body.isEnabled ?: false)
-                        call.respond(HttpStatusCode.OK)
-                    }
-
-                    // Drag & drop result: full ordered layout (order = matching precedence)
-                    put("/mocks/layout") {
-                        val body = call.receive<LayoutRequest>()
-                        val items = body.items.orEmpty().filterNotNull()
-                            .mapNotNull { d -> d.id?.let { RulePlacement(it, d.group ?: "") } }
-                        MockRepository.applyLayout(items)
-                        call.respond(HttpStatusCode.OK)
-                    }
-
-                    patch("/mocks/group/rename") {
-                        val body = call.receive<GroupRenameRequest>()
-                        MockRepository.renameGroup(body.from ?: "", (body.to ?: "").trim())
-                        call.respond(HttpStatusCode.OK)
-                    }
-
-                    post("/mocks/import") {
-                        val payload = call.receive<ImportRequest>()
-                        val incoming = payload.rules.orEmpty().filterNotNull().map { it.toRule() }
-                        val (valid, invalid) = incoming.partition {
-                            it.urlPattern.isNotBlank() && validatePattern(it.urlPattern) == null
-                        }
-                        val withIds = valid.map { it.copy(id = UUID.randomUUID().toString()) }
-                        if (payload.mode == "replace") MockRepository.replaceAll(withIds)
-                        else MockRepository.addAll(withIds)
-                        call.respond(mapOf("imported" to withIds.size, "skipped" to invalid.size))
-                    }
-
-                    get("/status") {
-                        call.respond(mapOf(
-                            "running" to true,
-                            "port" to (engine?.environment?.connectors?.firstOrNull()?.port ?: 8090),
-                            "callCount" to NetworkStore.getAll().size,
-                            "mockCount" to MockRepository.getRules().size,
-                            "packageName" to appInfo.packageName,
-                            "appVersion" to appInfo.appVersion,
-                            "versionCode" to appInfo.versionCode,
-                            "deviceModel" to appInfo.deviceModel,
-                            "sdkInt" to appInfo.sdkInt
-                        ))
-                    }
-                }
-
-                // WebSocket - real-time push of new requests
-                webSocket("/ws") {
-                    activeSessions.add(this)
-                    val listener: (CapturedRequest) -> Unit = { capturedCall ->
-                        launch {
-                            runCatching {
-                                send(Frame.Text(gson.toJson(capturedCall)))
-                            }
-                        }
-                    }
-                    NetworkStore.addListener(listener)
-                    try {
-                        for (frame in incoming) { /* keep-alive */ }
-                    } catch (e: ClosedSendChannelException) {
-                        // normal close
-                    } finally {
-                        NetworkStore.removeListener(listener)
-                        activeSessions.remove(this)
-                    }
-                }
-            }
+            peekabooModule(appInfo) { engine?.environment?.connectors?.firstOrNull()?.port ?: port }
         }.start(wait = false)
         return port
-    }
-
-    private fun validatePattern(pattern: String): String? {
-        if (pattern.isBlank()) return "URL pattern must not be empty"
-        return runCatching { Regex(pattern) }.exceptionOrNull()
-            ?.let { "Invalid regex: ${it.message}" }
     }
 
     private fun findAvailablePort(preferred: Int): Int {
@@ -263,4 +105,171 @@ internal class PeekabooServer(private val appInfo: AppInfo) {
         engine?.stop(1000, 2000)
         engine = null
     }
+}
+
+/**
+ * The inspector's plugins + routes, extracted from [PeekabooServer] so the API
+ * can be exercised with Ktor's `testApplication` without binding a real socket.
+ */
+internal fun Application.peekabooModule(appInfo: AppInfo, boundPort: () -> Int) {
+    val gson = Gson()
+    val activeSessions = CopyOnWriteArrayList<DefaultWebSocketSession>()
+
+    install(ContentNegotiation) { gson() }
+    install(WebSockets)
+    install(StatusPages) {
+        // Ktor logs through SLF4J, which is a no-op on Android — surface
+        // API errors in Logcat and in the response body instead.
+        exception<Throwable> { call, cause ->
+            android.util.Log.e("Peekaboo", "Inspector API error: ${call.request.uri}", cause)
+            call.respond(
+                HttpStatusCode.InternalServerError,
+                mapOf("error" to (cause.message ?: cause.toString()))
+            )
+        }
+    }
+
+    routing {
+        // Web UI served from classpath resources under web/
+        staticResources("/", "web") {
+            default("index.html")
+        }
+
+        // REST API
+        route("/api") {
+            get("/calls") {
+                call.respond(NetworkStore.getAll())
+            }
+
+            get("/calls/{id}") {
+                val found = NetworkStore.getById(call.parameters["id"]!!)
+                if (found != null) call.respond(found)
+                else call.respond(HttpStatusCode.NotFound, mapOf("error" to "Not found"))
+            }
+
+            delete("/calls") {
+                NetworkStore.clear()
+                call.respond(HttpStatusCode.OK, mapOf("status" to "cleared"))
+            }
+
+            get("/mocks") {
+                call.respond(MockRepository.getRules())
+            }
+
+            post("/mocks") {
+                val rule = call.receive<MockRuleDto>().toRule()
+                val regexError = validatePattern(rule.urlPattern)
+                if (regexError != null) {
+                    call.respond(HttpStatusCode.BadRequest, mapOf("error" to regexError))
+                    return@post
+                }
+                val withId = rule.copy(id = UUID.randomUUID().toString())
+                MockRepository.addRule(withId)
+                call.respond(HttpStatusCode.Created, withId)
+            }
+
+            put("/mocks/{id}") {
+                val updated = call.receive<MockRuleDto>().toRule()
+                val regexError = validatePattern(updated.urlPattern)
+                if (regexError != null) {
+                    call.respond(HttpStatusCode.BadRequest, mapOf("error" to regexError))
+                    return@put
+                }
+                MockRepository.updateRule(updated.copy(id = call.parameters["id"]!!))
+                call.respond(HttpStatusCode.OK)
+            }
+
+            delete("/mocks/{id}") {
+                MockRepository.removeRule(call.parameters["id"]!!)
+                call.respond(HttpStatusCode.OK)
+            }
+
+            patch("/mocks/{id}/toggle") {
+                MockRepository.toggleRule(call.parameters["id"]!!)
+                call.respond(HttpStatusCode.OK)
+            }
+
+            // Constant segments outrank {id} in Ktor routing, so these
+            // never collide with /mocks/{id}/... (rule ids are UUIDs anyway).
+            patch("/mocks/group/toggle") {
+                val body = call.receive<GroupToggleRequest>()
+                MockRepository.setGroupEnabled(body.group ?: "", body.isEnabled ?: false)
+                call.respond(HttpStatusCode.OK)
+            }
+
+            patch("/mocks/all/toggle") {
+                val body = call.receive<GroupToggleRequest>()
+                MockRepository.setAllEnabled(body.isEnabled ?: false)
+                call.respond(HttpStatusCode.OK)
+            }
+
+            // Drag & drop result: full ordered layout (order = matching precedence)
+            put("/mocks/layout") {
+                val body = call.receive<LayoutRequest>()
+                val items = body.items.orEmpty().filterNotNull()
+                    .mapNotNull { d -> d.id?.let { RulePlacement(it, d.group ?: "") } }
+                MockRepository.applyLayout(items)
+                call.respond(HttpStatusCode.OK)
+            }
+
+            patch("/mocks/group/rename") {
+                val body = call.receive<GroupRenameRequest>()
+                MockRepository.renameGroup(body.from ?: "", (body.to ?: "").trim())
+                call.respond(HttpStatusCode.OK)
+            }
+
+            post("/mocks/import") {
+                val payload = call.receive<ImportRequest>()
+                val incoming = payload.rules.orEmpty().filterNotNull().map { it.toRule() }
+                val (valid, invalid) = incoming.partition {
+                    it.urlPattern.isNotBlank() && validatePattern(it.urlPattern) == null
+                }
+                val withIds = valid.map { it.copy(id = UUID.randomUUID().toString()) }
+                if (payload.mode == "replace") MockRepository.replaceAll(withIds)
+                else MockRepository.addAll(withIds)
+                call.respond(mapOf("imported" to withIds.size, "skipped" to invalid.size))
+            }
+
+            get("/status") {
+                call.respond(mapOf(
+                    "running" to true,
+                    "port" to boundPort(),
+                    "callCount" to NetworkStore.getAll().size,
+                    "mockCount" to MockRepository.getRules().size,
+                    "packageName" to appInfo.packageName,
+                    "appVersion" to appInfo.appVersion,
+                    "versionCode" to appInfo.versionCode,
+                    "deviceModel" to appInfo.deviceModel,
+                    "sdkInt" to appInfo.sdkInt
+                ))
+            }
+        }
+
+        // WebSocket - real-time push of new requests
+        webSocket("/ws") {
+            activeSessions.add(this)
+            val listener: (CapturedRequest) -> Unit = { capturedCall ->
+                launch {
+                    runCatching {
+                        send(Frame.Text(gson.toJson(capturedCall)))
+                    }
+                }
+            }
+            NetworkStore.addListener(listener)
+            try {
+                for (frame in incoming) { /* keep-alive */ }
+            } catch (e: ClosedSendChannelException) {
+                // normal close
+            } finally {
+                NetworkStore.removeListener(listener)
+                activeSessions.remove(this)
+            }
+        }
+    }
+}
+
+private fun validatePattern(pattern: String): String? {
+    if (pattern.isBlank()) return "URL pattern must not be empty"
+    return runCatching { Regex(pattern) }.exceptionOrNull()
+        ?.let { "Invalid regex: ${it.message}" }
 }

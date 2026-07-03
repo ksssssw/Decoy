@@ -28,5 +28,5 @@ class PostRepository(private val client: HttpClient) {
 
     /** Server-side delayed response — for slow-network testing. */
     suspend fun delayed(seconds: Int): Int =
-        client.get("https://httpbin.org/delay/$seconds").status.value
+        client.get("https://httpbingo.org/delay/$seconds").status.value
 }
