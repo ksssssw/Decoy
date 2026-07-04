@@ -1,22 +1,13 @@
 plugins {
-    alias(libs.plugins.android.library)
-    alias(libs.plugins.kotlin.android)
+    id("peekaboo.android.library")
 }
 android {
     namespace = "com.peekaboo.android"
-    compileSdk = 34
-    defaultConfig { minSdk = 24 }
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
-    }
-    kotlinOptions { jvmTarget = "11" }
     testOptions {
         // android.util.Log is called from JVM unit tests — return defaults instead of throwing
         unitTests.isReturnDefaultValues = true
     }
 }
-kotlin { explicitApi() }
 dependencies {
     api(project(":peekaboo-core"))
     implementation(libs.ktor.server.core)
@@ -28,7 +19,5 @@ dependencies {
     implementation(libs.gson)
     implementation(libs.coroutines)
 
-    testImplementation(libs.junit)
-    testImplementation(libs.kotlin.test.junit)
     testImplementation(libs.ktor.server.test.host)
 }

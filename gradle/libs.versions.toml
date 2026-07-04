@@ -1,6 +1,9 @@
 [versions]
 agp = "8.13.2"
 kotlin = "2.0.21"
+projectCompileSdk = "36"
+projectMinSdk = "24"
+projectTargetSdk = "36"
 coreKtx = "1.10.1"
 junit = "4.13.2"
 junitVersion = "1.1.5"
@@ -46,6 +49,10 @@ ktor-serialization-gson = { module = "io.ktor:ktor-serialization-gson", version.
 # Koin
 koin-android = { module = "io.insert-koin:koin-android", version.ref = "koin" }
 koin-compose = { module = "io.insert-koin:koin-androidx-compose", version.ref = "koin" }
+
+# Gradle plugin artifacts — compileOnly deps of build-logic only
+android-gradlePlugin = { group = "com.android.tools.build", name = "gradle", version.ref = "agp" }
+kotlin-gradlePlugin = { group = "org.jetbrains.kotlin", name = "kotlin-gradle-plugin", version.ref = "kotlin" }
 
 # Other
 gson = { module = "com.google.code.gson:gson", version.ref = "gson" }

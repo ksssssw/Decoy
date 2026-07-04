@@ -1,13 +1,5 @@
 plugins {
-    alias(libs.plugins.kotlin.jvm)
-}
-java {
-    sourceCompatibility = JavaVersion.VERSION_11
-    targetCompatibility = JavaVersion.VERSION_11
-}
-kotlin {
-    explicitApi()
-    compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11) }
+    id("peekaboo.kotlin.jvm")
 }
 dependencies {
     // Ships PeekabooLauncher (returns null) so main-source-set call sites compile in release.

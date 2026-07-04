@@ -1,5 +1,4 @@
 pluginManagement {
-    includeBuild("build-logic")
     repositories {
         google {
             content {
@@ -18,13 +17,12 @@ dependencyResolutionManagement {
         google()
         mavenCentral()
     }
+    versionCatalogs {
+        create("libs") {
+            from(files("../gradle/libs.versions.toml"))
+        }
+    }
 }
 
-rootProject.name = "Peekaboo"
-include(":app")
-include(":peekaboo-core")
-include(":peekaboo-android")
-include(":peekaboo-okhttp")
-include(":peekaboo-okhttp-noop")
-include(":peekaboo-ktor")
-include(":peekaboo-ktor-noop")
+rootProject.name = "build-logic"
+include(":convention")
