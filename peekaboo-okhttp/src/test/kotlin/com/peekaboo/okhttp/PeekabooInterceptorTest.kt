@@ -3,6 +3,8 @@ package com.peekaboo.okhttp
 import com.peekaboo.core.MockRepository
 import com.peekaboo.core.MockRule
 import com.peekaboo.core.NetworkStore
+import com.peekaboo.core.Peekaboo
+import com.peekaboo.core.PeekabooProvider
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -21,6 +23,13 @@ import kotlin.test.assertTrue
 
 class PeekabooInterceptorTest {
 
+    private class FakePeekaboo(private val running: Boolean = true) : Peekaboo {
+        override fun start(port: Int) {}
+        override fun stop() {}
+        override fun isRunning(): Boolean = running
+        override fun getPort(): Int = 8090
+    }
+
     private lateinit var server: MockWebServer
     private val client = OkHttpClient.Builder()
         .addInterceptor(PeekabooInterceptor())
@@ -29,6 +38,7 @@ class PeekabooInterceptorTest {
 
     @Before
     fun setUp() {
+        PeekabooProvider.instance = FakePeekaboo()
         NetworkStore.clear()
         MockRepository.replaceAll(emptyList())
         server = MockWebServer()
@@ -140,6 +150,68 @@ class PeekabooInterceptorTest {
         execute(Request.Builder().url(server.url("/events")).build()).close()
 
         assertEquals("[skipped: event-stream]", NetworkStore.getAll().single().responseBody)
+    }
+
+    @Test
+    fun `stays fully passive when the inspector is not running`() {
+        PeekabooProvider.instance = FakePeekaboo(running = false)
+        MockRepository.addRule(mockRule("/posts"))
+        server.enqueue(MockResponse().setBody("real"))
+
+        val response = execute(Request.Builder().url(server.url("/posts")).build())
+
+        assertEquals("real", response.body?.string())
+        assertEquals(1, server.requestCount) // mock rule ignored — real network used
+        assertTrue(NetworkStore.getAll().isEmpty()) // nothing captured either
+    }
+
+    @Test
+    fun `response body over 1MB is truncated at the limit and flagged`() {
+        val limit = 1024 * 1024
+        server.enqueue(MockResponse().setBody("a".repeat(limit + 1))
+            .setHeader("Content-Type", "application/json"))
+        execute(Request.Builder().url(server.url("/big")).build()).close()
+
+        val captured = NetworkStore.getAll().single()
+        assertTrue(captured.bodyTruncated)
+        assertEquals(limit, captured.responseBody!!.length)
+    }
+
+    @Test
+    fun `response body exactly at 1MB is captured whole without the flag`() {
+        val limit = 1024 * 1024
+        server.enqueue(MockResponse().setBody("a".repeat(limit))
+            .setHeader("Content-Type", "application/json"))
+        execute(Request.Builder().url(server.url("/exact")).build()).close()
+
+        val captured = NetworkStore.getAll().single()
+        assertEquals(false, captured.bodyTruncated)
+        assertEquals(limit, captured.responseBody!!.length)
+    }
+
+    @Test
+    fun `request body over 1MB is skipped without buffering`() {
+        server.enqueue(MockResponse().setBody("{}"))
+        val big = "a".repeat(1024 * 1024 + 1).toRequestBody("application/json".toMediaType())
+        execute(Request.Builder().url(server.url("/upload")).post(big).build()).close()
+
+        assertTrue(NetworkStore.getAll().single().requestBody!!.startsWith("[skipped: request body"))
+    }
+
+    @Test
+    fun `credential headers are redacted in captured request and response`() {
+        server.enqueue(MockResponse().setBody("{}")
+            .setHeader("Content-Type", "application/json")
+            .setHeader("Set-Cookie", "session=1234"))
+        execute(Request.Builder().url(server.url("/auth"))
+            .header("Authorization", "Bearer secret")
+            .header("X-Request-Id", "42")
+            .build()).close()
+
+        val captured = NetworkStore.getAll().single()
+        assertEquals("[redacted]", captured.requestHeaders["Authorization"])
+        assertEquals("42", captured.requestHeaders["X-Request-Id"])
+        assertEquals("[redacted]", captured.responseHeaders["Set-Cookie"])
     }
 
     @Test

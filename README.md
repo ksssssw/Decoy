@@ -180,8 +180,10 @@ The API used by the web UI can also be called directly (e.g. injecting rules fro
 ## Security
 
 - The server binds to **127.0.0.1 only** — other devices on the same Wi-Fi cannot reach it. PC access works only through `adb forward` (requires USB/adb authorization).
+- Credential headers (`Authorization`, `Proxy-Authorization`, `Cookie`, `Set-Cookie`) are **masked as `[redacted]` at capture time** — tokens never reach the store, the API, or the web UI in clear text.
+- The `/ws` live feed **rejects cross-origin WebSocket connections** (only `localhost`/`127.0.0.1` origins, or clients without an Origin header, are accepted) — a page open in the device browser cannot read the capture stream.
 - Release builds include only the no-op artifacts, so no server/intercept code exists in the APK.
-- Residual threat model: **another app installed on the same device** could reach the debug build's local port (same as Chucker and similar tools). If your app handles sensitive traffic, be mindful of who receives debug builds.
+- Residual threat model: **another app installed on the same device** could reach the debug build's local port (same as Chucker and similar tools). Beyond reading captures, that includes **injecting or wiping mock rules via the REST API** — i.e. altering the responses your debug app sees. If your app handles sensitive traffic, be mindful of who receives debug builds.
 - Never add the real artifact with `implementation` (all build types) — your release would ship an open-port server.
 
 ### Verifying release builds contain no Peekaboo

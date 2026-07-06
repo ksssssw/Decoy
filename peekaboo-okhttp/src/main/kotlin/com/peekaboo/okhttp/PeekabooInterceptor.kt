@@ -1,8 +1,10 @@
 package com.peekaboo.okhttp
 
 import com.peekaboo.core.CapturedRequest
+import com.peekaboo.core.HeaderRedactor
 import com.peekaboo.core.MockRepository
 import com.peekaboo.core.NetworkStore
+import com.peekaboo.core.PeekabooProvider
 import okhttp3.Headers
 import okhttp3.Interceptor
 import okhttp3.MediaType
@@ -29,6 +31,12 @@ import java.util.UUID
 public class PeekabooInterceptor : Interceptor {
 
     override fun intercept(chain: Interceptor.Chain): Response {
+        // Inspector not running (init failed, server stopped) → stay fully passive,
+        // mirroring the Ktor plugin's gating: no mocking, no capture.
+        if (!PeekabooProvider.isInitialized() || !PeekabooProvider.instance.isRunning()) {
+            return chain.proceed(chain.request())
+        }
+
         val request = chain.request()
         val id = UUID.randomUUID().toString()
         val startTime = System.currentTimeMillis()
@@ -137,7 +145,13 @@ public class PeekabooInterceptor : Interceptor {
         return try {
             val bytes = response.peekBody(BODY_LIMIT + 1).bytes()
             val truncated = bytes.size > BODY_LIMIT
-            val text = String(if (truncated) bytes.copyOf(BODY_LIMIT.toInt()) else bytes)
+            // A cut at the byte limit can land mid-UTF-8-sequence — drop the
+            // resulting replacement char instead of showing a garbled tail.
+            val text = if (truncated) {
+                String(bytes.copyOf(BODY_LIMIT.toInt())).trimEnd('�')
+            } else {
+                String(bytes)
+            }
             text to truncated
         } catch (e: IOException) {
             "[unreadable body: ${e.message}]" to false
@@ -155,6 +169,10 @@ public class PeekabooInterceptor : Interceptor {
     private fun extractRequestBody(request: Request): String? {
         val body = request.body ?: return null
         if (body.isDuplex() || body.isOneShot()) return "[skipped: streaming request body]"
+        // writeTo copies the whole body into memory — refuse oversized ones up front
+        // instead of buffering a multi-MB upload just to throw most of it away.
+        val length = body.contentLength()
+        if (length > BODY_LIMIT) return "[skipped: request body $length bytes]"
         return runCatching {
             val buffer = Buffer()
             body.writeTo(buffer)
@@ -162,8 +180,10 @@ public class PeekabooInterceptor : Interceptor {
         }.getOrNull()?.takeIf { it.isNotBlank() }
     }
 
+    // Credential headers are masked before entering the store — captures are
+    // served over the unauthenticated loopback API and must never carry tokens.
     private fun Headers.toMap(): Map<String, String> =
-        names().associateWith { name -> values(name).joinToString(", ") }
+        HeaderRedactor.redact(names().associateWith { name -> values(name).joinToString(", ") })
 
     private companion object {
         const val BODY_LIMIT = 1024 * 1024L // 1MB

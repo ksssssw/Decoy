@@ -1,6 +1,7 @@
 package com.peekaboo.ktor
 
 import com.peekaboo.core.CapturedRequest
+import com.peekaboo.core.HeaderRedactor
 import com.peekaboo.core.MockRepository
 import com.peekaboo.core.NetworkStore
 import com.peekaboo.core.PeekabooProvider
@@ -84,8 +85,7 @@ public val PeekabooKtorPlugin: ClientPlugin<Unit> = createClientPlugin("Peekaboo
                     timestamp = startTime,
                     method = method,
                     url = url,
-                    requestHeaders = requestData.headers.entries()
-                        .associate { it.key to it.value.joinToString(", ") },
+                    requestHeaders = requestData.headers.entries().toRedactedHeaderMap(),
                     requestBody = requestBody,
                     responseCode = mockRule.statusCode,
                     responseHeaders = mockRule.responseHeaders,
@@ -107,8 +107,7 @@ public val PeekabooKtorPlugin: ClientPlugin<Unit> = createClientPlugin("Peekaboo
                         timestamp = startTime,
                         method = method,
                         url = url,
-                        requestHeaders = requestBuilder.headers.entries()
-                            .associate { it.key to it.value.joinToString(", ") },
+                        requestHeaders = requestBuilder.headers.entries().toRedactedHeaderMap(),
                         requestBody = requestBody,
                         responseCode = null,
                         responseHeaders = emptyMap(),
@@ -145,12 +144,10 @@ private suspend fun captureRealCall(
                 timestamp = startTime,
                 method = call.request.method.value,
                 url = call.request.url.toString(),
-                requestHeaders = call.request.headers.entries()
-                    .associate { it.key to it.value.joinToString(", ") },
+                requestHeaders = call.request.headers.entries().toRedactedHeaderMap(),
                 requestBody = requestBody,
                 responseCode = response.status.value,
-                responseHeaders = response.headers.entries()
-                    .associate { it.key to it.value.joinToString(", ") },
+                responseHeaders = response.headers.entries().toRedactedHeaderMap(),
                 responseBody = bodyText,
                 durationMs = System.currentTimeMillis() - startTime,
                 bodyTruncated = truncated
@@ -173,6 +170,14 @@ private suspend fun captureRealCall(
         record("[binary body: ${size?.let { "$it bytes" } ?: "unknown size"}]")
         return call
     }
+    // call.save() buffers the whole response in memory — refuse bodies that
+    // declare themselves oversized instead of buffering a multi-MB download
+    // just to truncate it. Unknown-length bodies still go through save().
+    val declaredLength = response.contentLength()
+    if (declaredLength != null && declaredLength > BODY_LIMIT) {
+        record("[skipped: body $declaredLength bytes]")
+        return call
+    }
 
     val saved = try {
         call.save()
@@ -184,12 +189,19 @@ private suspend fun captureRealCall(
     val truncated = bytes.size > BODY_LIMIT
     val text = when {
         bytes.isEmpty() -> null
-        truncated -> String(bytes.copyOf(BODY_LIMIT), Charsets.UTF_8)
+        // A cut at the byte limit can land mid-UTF-8-sequence — drop the
+        // resulting replacement char instead of showing a garbled tail.
+        truncated -> String(bytes.copyOf(BODY_LIMIT), Charsets.UTF_8).trimEnd('�')
         else -> String(bytes, Charsets.UTF_8)
     }
     record(text, truncated)
     return saved
 }
+
+// Credential headers are masked before entering the store — captures are
+// served over the unauthenticated loopback API and must never carry tokens.
+private fun Set<Map.Entry<String, List<String>>>.toRedactedHeaderMap(): Map<String, String> =
+    HeaderRedactor.redact(associate { it.key to it.value.joinToString(", ") })
 
 private fun isTextLike(contentType: ContentType?): Boolean {
     val type = contentType ?: return true // unknown — attempt capture

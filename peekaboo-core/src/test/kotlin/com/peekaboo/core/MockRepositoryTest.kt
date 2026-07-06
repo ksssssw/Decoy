@@ -40,6 +40,25 @@ class MockRepositoryTest {
         group = group,
     )
 
+    @Test
+    fun `concurrent mutations never corrupt state or throw`() {
+        MockRepository.replaceAll((0 until 100).map { rule("/p$it", id = "id$it") })
+
+        val threads = listOf(
+            Thread { repeat(100) { i -> MockRepository.toggleRule("id$i") } },
+            Thread { repeat(100) { i -> MockRepository.removeRule("id$i") } },
+            Thread { repeat(50) { MockRepository.setAllEnabled(false) } },
+        )
+        val failures = mutableListOf<Throwable>()
+        threads.forEach { t -> t.setUncaughtExceptionHandler { _, e -> synchronized(failures) { failures.add(e) } } }
+        threads.forEach { it.start() }
+        threads.forEach { it.join(5000) }
+
+        assertTrue(failures.isEmpty(), "concurrent mutation threw: ${failures.firstOrNull()}")
+        // The remover eventually deletes every id; interleaved toggles are no-ops on gone rules.
+        assertTrue(MockRepository.getRules().isEmpty())
+    }
+
     @Before
     fun setUp() {
         // MockRepository is a singleton — attaching a fresh empty storage resets it

@@ -9,16 +9,20 @@ import com.peekaboo.core.PeekabooProvider
 
 public class PeekabooInitializer : ContentProvider() {
     override fun onCreate(): Boolean {
+        // Off the main thread: rule loading is disk I/O and the port scan binds
+        // sockets — both would trigger StrictMode and delay app startup.
         // A dev tool must never crash the host app — fail quietly and log instead.
-        runCatching {
-            val appContext = context!!
-            MockRepository.attachStorage(FileRuleStorage(appContext.filesDir))
-            val peekaboo = RealPeekaboo(PeekabooServer(loadAppInfo()))
-            peekaboo.start()
-            PeekabooProvider.instance = peekaboo
-        }.onFailure {
-            android.util.Log.e("Peekaboo", "Failed to start Peekaboo inspector", it)
-        }
+        Thread({
+            runCatching {
+                val appContext = context!!
+                MockRepository.attachStorage(FileRuleStorage(appContext.filesDir))
+                val peekaboo = RealPeekaboo(PeekabooServer(loadAppInfo()))
+                peekaboo.start()
+                PeekabooProvider.instance = peekaboo
+            }.onFailure {
+                android.util.Log.e("Peekaboo", "Failed to start Peekaboo inspector", it)
+            }
+        }, "peekaboo-init").start()
         return true
     }
     private fun loadAppInfo(): AppInfo {

@@ -5,16 +5,26 @@ import com.peekaboo.core.CapturedRequest
 import com.peekaboo.core.MockRepository
 import com.peekaboo.core.MockRule
 import com.peekaboo.core.NetworkStore
+import io.ktor.client.plugins.websocket.WebSockets
+import io.ktor.client.plugins.websocket.webSocket
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
+import io.ktor.client.request.header
 import io.ktor.client.request.patch
 import io.ktor.client.request.post
 import io.ktor.client.request.put
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
+import io.ktor.websocket.CloseReason
+import io.ktor.websocket.Frame
+import io.ktor.websocket.readText
+import io.ktor.websocket.WebSocketSession
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import io.ktor.server.testing.ApplicationTestBuilder
 import io.ktor.server.testing.testApplication
 import org.junit.After
@@ -162,6 +172,120 @@ class PeekabooServerRoutesTest {
         val rules = MockRepository.getRules()
         assertEquals(listOf("b", "a"), rules.map { it.id })
         assertEquals("g", rules[0].group)
+    }
+
+    @Test
+    fun `update endpoint replaces the rule while keeping the path id`() = apiTest {
+        MockRepository.addRule(MockRule("r1", "/old", "GET", 200, "{}"))
+        val response = client.put("/api/mocks/r1") {
+            contentType(ContentType.Application.Json)
+            setBody(ruleJson("/new"))
+        }
+        assertEquals(HttpStatusCode.OK, response.status)
+        val rule = MockRepository.getRules().single()
+        assertEquals("r1", rule.id)
+        assertEquals("/new", rule.urlPattern)
+    }
+
+    @Test
+    fun `update endpoint rejects an invalid regex with 400`() = apiTest {
+        MockRepository.addRule(MockRule("r1", "/old", "GET", 200, "{}"))
+        val response = client.put("/api/mocks/r1") {
+            contentType(ContentType.Application.Json)
+            setBody(ruleJson("[unclosed"))
+        }
+        assertEquals(HttpStatusCode.BadRequest, response.status)
+        assertEquals("/old", MockRepository.getRules().single().urlPattern)
+    }
+
+    @Test
+    fun `delete endpoint removes the rule`() = apiTest {
+        MockRepository.addRule(MockRule("r1", "/a", "GET", 200, "{}"))
+        client.delete("/api/mocks/r1")
+        assertTrue(MockRepository.getRules().isEmpty())
+    }
+
+    @Test
+    fun `group toggle flips only that group`() = apiTest {
+        MockRepository.addAll(listOf(
+            MockRule("a", "/a", "GET", 200, "{}", group = "g1"),
+            MockRule("b", "/b", "GET", 200, "{}", group = "g2"),
+        ))
+        client.patch("/api/mocks/group/toggle") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"group":"g1","isEnabled":false}""")
+        }
+        val rules = MockRepository.getRules()
+        assertEquals(false, rules.first { it.id == "a" }.isEnabled)
+        assertEquals(true, rules.first { it.id == "b" }.isEnabled)
+    }
+
+    @Test
+    fun `all toggle flips every rule`() = apiTest {
+        MockRepository.addAll(listOf(
+            MockRule("a", "/a", "GET", 200, "{}"),
+            MockRule("b", "/b", "GET", 200, "{}"),
+        ))
+        client.patch("/api/mocks/all/toggle") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"isEnabled":false}""")
+        }
+        assertTrue(MockRepository.getRules().none { it.isEnabled })
+    }
+
+    @Test
+    fun `group rename merges onto an existing group`() = apiTest {
+        MockRepository.addAll(listOf(
+            MockRule("a", "/a", "GET", 200, "{}", group = "g1"),
+            MockRule("b", "/b", "GET", 200, "{}", group = "g2"),
+        ))
+        client.patch("/api/mocks/group/rename") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"from":"g1","to":"g2"}""")
+        }
+        assertTrue(MockRepository.getRules().all { it.group == "g2" })
+    }
+
+    @Test
+    fun `websocket rejects cross-origin pages`() = apiTest {
+        val wsClient = createClient { install(WebSockets) }
+        wsClient.webSocket("/ws", request = { header(HttpHeaders.Origin, "http://evil.example") }) {
+            val reason = closeReason.await()
+            assertEquals(CloseReason.Codes.VIOLATED_POLICY.code, reason?.code)
+        }
+    }
+
+    /**
+     * The server registers its NetworkStore listener only after the handshake, so a
+     * capture added immediately can be missed — keep re-adding until the push arrives
+     * instead of racing that registration (a single receive() would hang forever).
+     */
+    private suspend fun WebSocketSession.awaitCaptureFrame(id: String): Frame.Text =
+        withTimeout(10_000) {
+            var received: Frame.Text? = null
+            while (received == null) {
+                NetworkStore.add(capturedCall(id))
+                received = withTimeoutOrNull(200) { incoming.receive() } as? Frame.Text
+            }
+            received
+        }
+
+    @Test
+    fun `websocket streams captures to localhost origins`() = apiTest {
+        val wsClient = createClient { install(WebSockets) }
+        wsClient.webSocket("/ws", request = { header(HttpHeaders.Origin, "http://localhost:8090") }) {
+            val frame = awaitCaptureFrame("live")
+            assertTrue(frame.readText().contains("https://api.test/live"))
+        }
+    }
+
+    @Test
+    fun `websocket accepts clients without an origin header`() = apiTest {
+        val wsClient = createClient { install(WebSockets) }
+        wsClient.webSocket("/ws") {
+            val frame = awaitCaptureFrame("no-origin")
+            assertTrue(frame.readText().contains("https://api.test/no-origin"))
+        }
     }
 
     @Test

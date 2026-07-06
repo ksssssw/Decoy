@@ -20,4 +20,5 @@ dependencies {
     implementation(libs.coroutines)
 
     testImplementation(libs.ktor.server.test.host)
+    testImplementation(libs.ktor.client.websockets)
 }

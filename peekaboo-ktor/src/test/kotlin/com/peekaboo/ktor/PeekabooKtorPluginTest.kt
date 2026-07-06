@@ -11,6 +11,7 @@ import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.get
+import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
@@ -20,6 +21,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.http.headersOf
 import io.ktor.serialization.gson.gson
+import io.ktor.utils.io.ByteReadChannel
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Before
@@ -85,6 +87,76 @@ class PeekabooKtorPluginTest {
         responseBody = """{"mocked":true}""",
         delayMs = delayMs,
     )
+
+    @Test
+    fun `body with declared length over 1MB is skipped without buffering`() = runBlocking {
+        val c = HttpClient(MockEngine) {
+            engine {
+                addHandler {
+                    respond(
+                        "small actual payload", HttpStatusCode.OK,
+                        headersOf(
+                            HttpHeaders.ContentType to listOf("application/json"),
+                            HttpHeaders.ContentLength to listOf("2097152"),
+                        )
+                    )
+                }
+            }
+            installPeekaboo()
+        }
+        c.get("https://api.test/big").status
+
+        assertEquals("[skipped: body 2097152 bytes]", NetworkStore.getAll().single().responseBody)
+    }
+
+    @Test
+    fun `unknown-length body over 1MB is truncated at the limit and flagged`() = runBlocking {
+        val limit = 1024 * 1024
+        val c = HttpClient(MockEngine) {
+            engine {
+                addHandler {
+                    respond(
+                        ByteReadChannel(ByteArray(limit + 1) { 'a'.code.toByte() }),
+                        HttpStatusCode.OK,
+                        headersOf(HttpHeaders.ContentType, "application/json"),
+                    )
+                }
+            }
+            installPeekaboo()
+        }
+        c.get("https://api.test/chunked").bodyAsText()
+
+        val captured = NetworkStore.getAll().single()
+        assertTrue(captured.bodyTruncated)
+        assertEquals(limit, captured.responseBody!!.length)
+    }
+
+    @Test
+    fun `credential headers are redacted in captured request and response`() = runBlocking {
+        val c = HttpClient(MockEngine) {
+            engine {
+                addHandler {
+                    respond(
+                        """{"ok":1}""", HttpStatusCode.OK,
+                        headersOf(
+                            HttpHeaders.ContentType to listOf("application/json"),
+                            HttpHeaders.SetCookie to listOf("session=1234"),
+                        )
+                    )
+                }
+            }
+            installPeekaboo()
+        }
+        c.get("https://api.test/auth") {
+            header(HttpHeaders.Authorization, "Bearer secret")
+            header("X-Request-Id", "42")
+        }.bodyAsText()
+
+        val captured = NetworkStore.getAll().single()
+        assertEquals("[redacted]", captured.requestHeaders[HttpHeaders.Authorization])
+        assertEquals("42", captured.requestHeaders["X-Request-Id"])
+        assertEquals("[redacted]", captured.responseHeaders[HttpHeaders.SetCookie])
+    }
 
     @Test
     fun `status-only read is captured`() = runBlocking {

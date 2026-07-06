@@ -31,7 +31,11 @@ internal suspend fun createMockCall(
         statusCode = HttpStatusCode.fromValue(rule.statusCode),
         requestTime = GMTDate(),
         headers = Headers.build {
-            append(HttpHeaders.ContentType, "application/json")
+            // Default only — a Content-Type in the rule's headers must not end up
+            // duplicated alongside the fallback (append, not set, below).
+            if (rule.responseHeaders.keys.none { it.equals("Content-Type", ignoreCase = true) }) {
+                append(HttpHeaders.ContentType, "application/json")
+            }
             rule.responseHeaders.forEach { (k, v) -> append(k, v) }
         },
         version = HttpProtocolVersion.HTTP_1_1,

@@ -8,10 +8,12 @@ public object NetworkStore {
     private val calls = ArrayDeque<CapturedRequest>()
     private val listeners = CopyOnWriteArrayList<(CapturedRequest) -> Unit>()
 
-    @Synchronized
     public fun add(call: CapturedRequest) {
-        if (calls.size >= MAX_SIZE) calls.removeFirst()
-        calls.addLast(call)
+        synchronized(this) {
+            if (calls.size >= MAX_SIZE) calls.removeFirst()
+            calls.addLast(call)
+        }
+        // Notify outside the lock — a slow listener must never stall capture threads.
         listeners.forEach { it(call) }
     }
 

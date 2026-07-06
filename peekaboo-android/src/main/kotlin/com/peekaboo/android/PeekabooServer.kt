@@ -25,7 +25,6 @@ import java.io.IOException
 import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.util.UUID
-import java.util.concurrent.CopyOnWriteArrayList
 
 // Gson-deserialized request payloads — every field may arrive null (and Gson
 // silently turns a missing primitive like isEnabled into false), so the API
@@ -98,7 +97,9 @@ internal class PeekabooServer(private val appInfo: AppInfo) {
                 // port in use — try the next one
             }
         }
-        return preferred
+        // Failing loudly beats silently returning a taken port: the initializer
+        // logs this exception, making "web UI unreachable" diagnosable in Logcat.
+        throw IOException("Peekaboo: no free port in $preferred..${preferred + 9}")
     }
 
     fun stop() {
@@ -113,7 +114,6 @@ internal class PeekabooServer(private val appInfo: AppInfo) {
  */
 internal fun Application.peekabooModule(appInfo: AppInfo, boundPort: () -> Int) {
     val gson = Gson()
-    val activeSessions = CopyOnWriteArrayList<DefaultWebSocketSession>()
 
     install(ContentNegotiation) { gson() }
     install(WebSockets)
@@ -247,7 +247,16 @@ internal fun Application.peekabooModule(appInfo: AppInfo, boundPort: () -> Int) 
 
         // WebSocket - real-time push of new requests
         webSocket("/ws") {
-            activeSessions.add(this)
+            // Browsers don't apply CORS to WebSockets — without this check any page
+            // open in the device browser could read the full capture stream. Allow
+            // only same-device pages (localhost/127.0.0.1 on any port) and
+            // non-browser clients, which send no Origin header.
+            val origin = call.request.headers[HttpHeaders.Origin]
+            if (origin != null && !TRUSTED_WS_ORIGIN.matches(origin)) {
+                android.util.Log.w("Peekaboo", "Rejected cross-origin WebSocket from $origin")
+                close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, "Cross-origin WebSocket rejected"))
+                return@webSocket
+            }
             val listener: (CapturedRequest) -> Unit = { capturedCall ->
                 launch {
                     runCatching {
@@ -262,11 +271,12 @@ internal fun Application.peekabooModule(appInfo: AppInfo, boundPort: () -> Int) 
                 // normal close
             } finally {
                 NetworkStore.removeListener(listener)
-                activeSessions.remove(this)
             }
         }
     }
 }
+
+private val TRUSTED_WS_ORIGIN = Regex("^https?://(localhost|127\\.0\\.0\\.1)(:\\d+)?$")
 
 private fun validatePattern(pattern: String): String? {
     if (pattern.isBlank()) return "URL pattern must not be empty"

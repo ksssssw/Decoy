@@ -2,7 +2,10 @@ plugins {
     id("peekaboo.kotlin.jvm")
 }
 dependencies {
-    // Ships PeekabooLauncher (returns null) so main-source-set call sites compile in release.
+    // Re-exports :peekaboo-core (PeekabooLauncher etc. return null/no-op in release)
+    // so main-source-set call sites compile unchanged.
     api(project(":peekaboo-core"))
     api(libs.okhttp)
+
+    testImplementation(libs.okhttp.mockwebserver)
 }
