@@ -19,6 +19,7 @@ coroutines = "1.7.3"
 composeBom = "2024.09.03"
 activityCompose = "1.9.2"
 lifecycle = "2.8.6"
+vanniktechPublish = "0.30.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -53,6 +54,7 @@ koin-compose = { module = "io.insert-koin:koin-androidx-compose", version.ref = 
 # Gradle plugin artifacts — compileOnly deps of build-logic only
 android-gradlePlugin = { group = "com.android.tools.build", name = "gradle", version.ref = "agp" }
 kotlin-gradlePlugin = { group = "org.jetbrains.kotlin", name = "kotlin-gradle-plugin", version.ref = "kotlin" }
+vanniktech-gradlePlugin = { module = "com.vanniktech:gradle-maven-publish-plugin", version.ref = "vanniktechPublish" }
 
 # Other
 gson = { module = "com.google.code.gson:gson", version.ref = "gson" }

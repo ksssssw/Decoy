@@ -1,6 +1,6 @@
 import com.android.build.api.dsl.ApplicationExtension
-import com.peekaboo.buildlogic.intVersion
-import com.peekaboo.buildlogic.libs
+import com.decoy.buildlogic.intVersion
+import com.decoy.buildlogic.libs
 import org.gradle.api.JavaVersion
 import org.gradle.api.Plugin
 import org.gradle.api.Project

@@ -20,11 +20,11 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Peekaboo"
+rootProject.name = "Decoy"
 include(":app")
-include(":peekaboo-core")
-include(":peekaboo-android")
-include(":peekaboo-okhttp")
-include(":peekaboo-okhttp-noop")
-include(":peekaboo-ktor")
-include(":peekaboo-ktor-noop")
+include(":decoy-core")
+include(":decoy-android")
+include(":decoy-okhttp")
+include(":decoy-okhttp-noop")
+include(":decoy-ktor")
+include(":decoy-ktor-noop")

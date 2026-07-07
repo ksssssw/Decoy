@@ -1,8 +1,8 @@
-# Peekaboo — Android Network Inspector & Mocker
+# Decoy — Android Network Inspector & Mocker
 
 **English** | [한국어](README.ko.md)
 
-A Chucker/LeakCanary-style debug tool for Android. Add **two lines per HTTP stack** and inspect/mock all your app's traffic in a built-in web UI — perfect for reproducing error screens and edge-case data during development and QA.
+A debug-only network inspector & mocker for Android. Add **two lines per HTTP stack** and inspect/mock all your app's traffic in a built-in web UI — perfect for reproducing error screens and edge-case data during development and QA. Release builds contain none of it.
 
 - Automatically captures every HTTP request/response in your app
 - **Mock responses** from the web UI with regex URL patterns (status code / body / headers / delay)
@@ -24,13 +24,13 @@ A Chucker/LeakCanary-style debug tool for Android. Add **two lines per HTTP stac
 
 ```kotlin
 // build.gradle.kts
-debugImplementation("com.peekaboo:peekaboo-okhttp:<version>")
-releaseImplementation("com.peekaboo:peekaboo-okhttp-noop:<version>")
+debugImplementation("io.github.ksssssw:decoy-okhttp:0.1.0")
+releaseImplementation("io.github.ksssssw:decoy-okhttp-noop:0.1.0")
 ```
 
 ```kotlin
 val client = OkHttpClient.Builder()
-    .addInterceptor(PeekabooInterceptor()) // debug: capture+mock / release: no-op
+    .addInterceptor(DecoyInterceptor()) // debug: capture+mock / release: no-op
     .build()
 ```
 
@@ -38,14 +38,14 @@ val client = OkHttpClient.Builder()
 
 ```kotlin
 // build.gradle.kts
-debugImplementation("com.peekaboo:peekaboo-ktor:<version>")
-releaseImplementation("com.peekaboo:peekaboo-ktor-noop:<version>")
+debugImplementation("io.github.ksssssw:decoy-ktor:0.1.0")
+releaseImplementation("io.github.ksssssw:decoy-ktor-noop:0.1.0")
 ```
 
 ```kotlin
 HttpClient(CIO) {
-    installPeekaboo()                      // debug: capture+mock / release: no-op
-    install(ContentNegotiation) { gson() } // install Peekaboo BEFORE ContentNegotiation!
+    installDecoy()                      // debug: capture+mock / release: no-op
+    install(ContentNegotiation) { gson() } // install Decoy BEFORE ContentNegotiation!
 }
 ```
 
@@ -58,20 +58,20 @@ The server binds to the device's **loopback (127.0.0.1) only**. To connect:
 | Where | How |
 |---|---|
 | PC browser (recommended) | `adb forward tcp:8090 tcp:8090` → `http://localhost:8090` |
-| On-device browser | `http://localhost:8090` (or launch an intent via `PeekabooLauncher.getInspectorUrl()`) |
+| On-device browser | `http://localhost:8090` (or launch an intent via `DecoyLauncher.getInspectorUrl()`) |
 
-If port 8090 is taken, it automatically falls back to 8091–8099; the actual port is printed to Logcat (tag `Peekaboo`).
+If port 8090 is taken, it automatically falls back to 8091–8099; the actual port is printed to Logcat (tag `Decoy`).
 
 ```kotlin
 // Get the inspector URL from inside the app — returns null in release
-val url: String? = PeekabooLauncher.getInspectorUrl()
+val url: String? = DecoyLauncher.getInspectorUrl()
 ```
 
 ---
 
 ## Integrating into an existing NetworkModule
 
-Real services already have a DI module that owns their HTTP clients. Peekaboo is designed to drop into that module with **one line per stack** — no other structural change. The sample app's [`NetworkModule.kt`](app/src/main/kotlin/com/ksssssw/peekaboo/NetworkModule.kt) demonstrates the full pattern.
+Real services already have a DI module that owns their HTTP clients. Decoy is designed to drop into that module with **one line per stack** — no other structural change. The sample app's [`NetworkModule.kt`](app/src/main/kotlin/com/ksssssw/decoy/NetworkModule.kt) demonstrates the full pattern.
 
 ### Hilt
 
@@ -82,7 +82,7 @@ object NetworkModule {
     @Provides @Singleton
     fun provideOkHttpClient(): OkHttpClient =
         OkHttpClient.Builder()
-            .addInterceptor(PeekabooInterceptor()) // ← the only Peekaboo line
+            .addInterceptor(DecoyInterceptor()) // ← the only Decoy line
             .build()
 }
 ```
@@ -93,7 +93,7 @@ object NetworkModule {
 val networkModule = module {
     single {
         HttpClient(CIO) {
-            installPeekaboo()                      // ← the only Peekaboo line
+            installDecoy()                      // ← the only Decoy line
             install(ContentNegotiation) { gson() }
         }
     }
@@ -105,7 +105,7 @@ val networkModule = module {
 ```kotlin
 object Network {
     val okHttp: OkHttpClient = OkHttpClient.Builder()
-        .addInterceptor(PeekabooInterceptor())     // ← the only Peekaboo line
+        .addInterceptor(DecoyInterceptor())     // ← the only Decoy line
         .build()
 }
 ```
@@ -117,16 +117,16 @@ Because the `-noop` artifacts expose identical packages and signatures, these ca
 ## Module structure
 
 ```
-:peekaboo-okhttp        OkHttp interceptor (brings server+web UI transitively)  ← debugImplementation
-:peekaboo-okhttp-noop   proceed-only stub                                       ← releaseImplementation
-:peekaboo-ktor          Ktor client plugin (brings server+web UI transitively)  ← debugImplementation
-:peekaboo-ktor-noop     no-op stub                                              ← releaseImplementation
-:peekaboo-core          pure JVM, zero deps — models/stores/launcher (no direct declaration needed)
-:peekaboo-android       inspector server + web UI + auto-init (no direct declaration needed)
+:decoy-okhttp        OkHttp interceptor (brings server+web UI transitively)  ← debugImplementation
+:decoy-okhttp-noop   proceed-only stub                                       ← releaseImplementation
+:decoy-ktor          Ktor client plugin (brings server+web UI transitively)  ← debugImplementation
+:decoy-ktor-noop     no-op stub                                              ← releaseImplementation
+:decoy-core          pure JVM, zero deps — models/stores/launcher (no direct declaration needed)
+:decoy-android       inspector server + web UI + auto-init (no direct declaration needed)
 :app                    sample app — demonstrates both the Retrofit and Ktor stacks
 ```
 
-The no-op artifacts provide the same packages/signatures as the real modules, so your `main` source set keeps its Peekaboo call sites as-is and the dependency swap alone fully neutralizes them in release.
+The no-op artifacts provide the same packages/signatures as the real modules, so your `main` source set keeps its Decoy call sites as-is and the dependency swap alone fully neutralizes them in release.
 
 ## Mock Rules
 
@@ -147,7 +147,7 @@ Create rules in the web UI's **Mock Rules** tab, or from a captured request via 
 - Drop two ungrouped rules onto each other to create a new group (name it right away)
 - Drag group headers to reorder groups; rename with the pencil icon (renaming onto an existing name merges)
 
-Rules are saved — including order and groups — to `files/peekaboo/rules.json` and survive app restarts. Captured traffic is in-memory (latest 500 entries).
+Rules are saved — including order and groups — to `files/decoy/rules.json` and survive app restarts. Captured traffic is in-memory (latest 500 entries).
 
 Mocked calls show a purple duration in the Traffic list. The duration is the **actual elapsed time** (including the configured delay); the detail view additionally shows the configured delay as `Mock Delay`.
 
@@ -183,18 +183,18 @@ The API used by the web UI can also be called directly (e.g. injecting rules fro
 - Credential headers (`Authorization`, `Proxy-Authorization`, `Cookie`, `Set-Cookie`) are **masked as `[redacted]` at capture time** — tokens never reach the store, the API, or the web UI in clear text.
 - The `/ws` live feed **rejects cross-origin WebSocket connections** (only `localhost`/`127.0.0.1` origins, or clients without an Origin header, are accepted) — a page open in the device browser cannot read the capture stream.
 - Release builds include only the no-op artifacts, so no server/intercept code exists in the APK.
-- Residual threat model: **another app installed on the same device** could reach the debug build's local port (same as Chucker and similar tools). Beyond reading captures, that includes **injecting or wiping mock rules via the REST API** — i.e. altering the responses your debug app sees. If your app handles sensitive traffic, be mindful of who receives debug builds.
+- Residual threat model: **another app installed on the same device** could reach the debug build's local port. Beyond reading captures, that includes **injecting or wiping mock rules via the REST API** — i.e. altering the responses your debug app sees. If your app handles sensitive traffic, be mindful of who receives debug builds.
 - Never add the real artifact with `implementation` (all build types) — your release would ship an open-port server.
 
-### Verifying release builds contain no Peekaboo
+### Verifying release builds contain no Decoy
 
 ```bash
 ./gradlew :app:assembleRelease
 
 # 1) The dex must contain no server classes (only core models + stubs)
-$ANDROID_HOME/build-tools/<ver>/dexdump classes.dex from app-release.apk | grep "com/peekaboo"
-#   → only com/peekaboo/core/* and com/peekaboo/okhttp/PeekabooInterceptor (stub) should appear
-#   → com/peekaboo/android/* and io/ktor/server/* must be absent
+$ANDROID_HOME/build-tools/<ver>/dexdump classes.dex from app-release.apk | grep "com/decoy"
+#   → only com/decoy/core/* and com/decoy/okhttp/DecoyInterceptor (stub) should appear
+#   → com/decoy/android/* and io/ktor/server/* must be absent
 
 # 2) No listening port after install (8090 = 0x1F9A)
 adb shell "cat /proc/net/tcp | grep 1F9A"   # no output is correct
@@ -216,7 +216,6 @@ The `:app` module demonstrates both the Retrofit (OkHttp) and Ktor client paths 
 
 - Server-side request replay (re-issuing requests through the app's real client configuration)
 - Ktor 3.x support (removing `MockCallFactory`'s InternalAPI dependency)
-- Maven Central publication
 
 ## License
 

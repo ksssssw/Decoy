@@ -32,7 +32,7 @@ jobs:
           unzip -o -q "$APK" "classes*.dex" -d dexout
           DEXDUMP="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)/dexdump"
           LEAKED=$(for d in dexout/classes*.dex; do "$DEXDUMP" "$d" | grep "Class descriptor"; done \
-            | grep -E "Lcom/peekaboo/android/|Lio/ktor/server/" || true)
+            | grep -E "Lcom/decoy/android/|Lio/ktor/server/" || true)
           if [ -n "$LEAKED" ]; then
             echo "::error::Inspector classes leaked into the release APK:"
             echo "$LEAKED"

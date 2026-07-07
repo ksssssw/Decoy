@@ -1,4 +1,4 @@
-import com.peekaboo.buildlogic.addUnitTestDependencies
+import com.decoy.buildlogic.addUnitTestDependencies
 import org.gradle.api.JavaVersion
 import org.gradle.api.Plugin
 import org.gradle.api.Project

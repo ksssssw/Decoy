@@ -1,13 +1,13 @@
 plugins {
-    id("peekaboo.android.application")
+    id("decoy.android.application")
     alias(libs.plugins.kotlin.compose)
 }
 
 android {
-    namespace = "com.ksssssw.peekaboo"
+    namespace = "com.ksssssw.decoy"
 
     defaultConfig {
-        applicationId = "com.ksssssw.peekaboo"
+        applicationId = "com.ksssssw.decoy"
         versionCode = 1
         versionName = "1.0"
 
@@ -44,12 +44,12 @@ dependencies {
     implementation(libs.lifecycle.viewmodel.compose)
     debugImplementation(libs.compose.ui.tooling)
 
-    // Peekaboo — 2 lines per HTTP stack. The debug artifact brings the inspector
+    // Decoy — 2 lines per HTTP stack. The debug artifact brings the inspector
     // server + web UI transitively; the no-op twin keeps release call sites compiling.
-    debugImplementation(project(":peekaboo-ktor"))
-    releaseImplementation(project(":peekaboo-ktor-noop"))
-    debugImplementation(project(":peekaboo-okhttp"))
-    releaseImplementation(project(":peekaboo-okhttp-noop"))
+    debugImplementation(project(":decoy-ktor"))
+    releaseImplementation(project(":decoy-ktor-noop"))
+    debugImplementation(project(":decoy-okhttp"))
+    releaseImplementation(project(":decoy-okhttp-noop"))
 
     // Ktor client
     implementation(libs.ktor.client.cio)
