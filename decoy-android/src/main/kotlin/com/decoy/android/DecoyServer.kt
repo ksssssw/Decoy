@@ -73,7 +73,7 @@ internal data class MockRuleDto(
 }
 
 internal class DecoyServer(private val appInfo: AppInfo) {
-    private var engine: ApplicationEngine? = null
+    private var engine: EmbeddedServer<*, *>? = null
 
     /**
      * Starts the inspector server bound to loopback only — never reachable from
@@ -82,8 +82,12 @@ internal class DecoyServer(private val appInfo: AppInfo) {
      */
     fun start(preferredPort: Int = 8090): Int {
         val port = findAvailablePort(preferredPort)
+        // Ktor 3.x dropped ApplicationEnvironment.connectors; the actually-bound port
+        // is only available via engine.resolvedConnectors() (suspend). We already
+        // pre-bound and confirmed [port] in findAvailablePort and tell CIO to bind
+        // exactly it, so [port] is the source of truth — no connector lookup needed.
         engine = embeddedServer(CIO, host = "127.0.0.1", port = port) {
-            decoyModule(appInfo) { engine?.environment?.connectors?.firstOrNull()?.port ?: port }
+            decoyModule(appInfo) { port }
         }.start(wait = false)
         return port
     }

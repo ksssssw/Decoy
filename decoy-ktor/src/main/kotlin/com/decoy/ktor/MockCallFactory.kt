@@ -1,11 +1,12 @@
-@file:OptIn(io.ktor.util.InternalAPI::class)
+@file:OptIn(io.ktor.utils.io.InternalAPI::class)
 
 package com.decoy.ktor
 
-// ── Ktor 2.x ONLY ─────────────────────────────────────────────────────────────
+// ── Ktor 3.x ─────────────────────────────────────────────────────────────────
 // Ktor's public API offers no way to fabricate an HttpClientCall, so this file
 // is the single place that touches @InternalAPI (HttpResponseData constructor).
-// When migrating to Ktor 3.x, only this file should need changes.
+// A Ktor major-version bump changes only this file (in 3.0, InternalAPI moved
+// from io.ktor.util to io.ktor.utils.io; the constructors below were unchanged).
 
 import com.decoy.core.MockRule
 import io.ktor.client.HttpClient

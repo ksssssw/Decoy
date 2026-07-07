@@ -12,7 +12,7 @@ debug 빌드 전용 Android 네트워크 인스펙터·모커. HTTP 스택당 **
 - 룰셋 **Export/Import** — 전체/특정 그룹/선택한 룰만 JSON으로 추출, import 직후 **Undo** 지원
 - 다크/라이트 테마, 실행 중인 앱 패키지·버전 표시
 - 모킹 룰은 파일로 영속화 — 앱을 재시작해도 순서·그룹까지 유지
-- Retrofit(OkHttp)·Ktor client 모두 지원, DI(Hilt/Koin/수동) 비종속
+- Retrofit(OkHttp)·Ktor 3.x client 모두 지원, DI(Hilt/Koin/수동) 비종속
 - ContentProvider 자동 초기화 — `Application` 코드 수정 불필요
 - **release 빌드에는 서버/인터셉트 코드가 물리적으로 미포함** (no-op 스왑)
 
@@ -48,6 +48,8 @@ HttpClient(CIO) {
     install(ContentNegotiation) { gson() } // Decoy를 ContentNegotiation보다 먼저!
 }
 ```
+
+> **Ktor 버전:** Decoy는 **Ktor 3.x**를 대상으로 합니다(3.3에서 검증). Gradle이 debug 클래스패스의 Ktor 버전을 통일하기 때문에, 아직 Ktor 2.x를 쓰는 앱은 지원되지 않습니다 — 먼저 Ktor 3.x로 올리세요. 엔진은 무엇이든(`CIO`, `OkHttp`, …) 무관하며 `installDecoy()`는 엔진 비종속입니다.
 
 그게 전부입니다. debug 아티팩트가 인스펙터 서버 + 웹 UI를 함께 가져오고, 앱 실행 시 자동으로 기동됩니다.
 
@@ -215,7 +217,7 @@ adb shell "cat /proc/net/tcp | grep 1F9A"   # 출력 없음이 정상
 ## Roadmap
 
 - 서버사이드 request replay (앱의 실제 클라이언트 설정을 태우는 재요청)
-- Ktor 3.x 지원 (`MockCallFactory`의 InternalAPI 의존 제거)
+- 내장 인스펙터 서버를 소비자 Ktor 버전에서 디커플링 (shade/relocate 또는 의존성 가벼운 서버로 교체) — 단일 아티팩트로 어떤 Ktor 버전이든(혹은 Ktor 미사용 앱까지) 지원
 
 ## License
 

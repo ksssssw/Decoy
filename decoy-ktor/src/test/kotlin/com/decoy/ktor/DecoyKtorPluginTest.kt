@@ -90,14 +90,19 @@ class DecoyKtorPluginTest {
 
     @Test
     fun `body with declared length over 1MB is skipped without buffering`() = runBlocking {
+        // Ktor 3.x's default SaveBody plugin validates Content-Length against the
+        // bytes actually received, so the body must genuinely be the declared size
+        // (a mismatched length now throws before decoy's capture runs). Decoy still
+        // records the skip marker off Content-Length without adding its own buffer.
+        val declared = 2 * 1024 * 1024
         val c = HttpClient(MockEngine) {
             engine {
                 addHandler {
                     respond(
-                        "small actual payload", HttpStatusCode.OK,
+                        ByteReadChannel(ByteArray(declared)), HttpStatusCode.OK,
                         headersOf(
                             HttpHeaders.ContentType to listOf("application/json"),
-                            HttpHeaders.ContentLength to listOf("2097152"),
+                            HttpHeaders.ContentLength to listOf("$declared"),
                         )
                     )
                 }
@@ -106,7 +111,7 @@ class DecoyKtorPluginTest {
         }
         c.get("https://api.test/big").status
 
-        assertEquals("[skipped: body 2097152 bytes]", NetworkStore.getAll().single().responseBody)
+        assertEquals("[skipped: body $declared bytes]", NetworkStore.getAll().single().responseBody)
     }
 
     @Test

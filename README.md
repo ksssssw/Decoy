@@ -12,7 +12,7 @@ A debug-only network inspector & mocker for Android. Add **two lines per HTTP st
 - Rule set **Export/Import** — share JSON files with teammates and designers; export everything, a single group, or hand-picked rules; **Undo** right after an import
 - Dark/light theme, shows the running app's package & version
 - Mock rules persist to a file — order and groups survive app restarts
-- Supports both Retrofit (OkHttp) and Ktor client; DI-agnostic (Hilt/Koin/manual)
+- Supports both Retrofit (OkHttp) and Ktor 3.x client; DI-agnostic (Hilt/Koin/manual)
 - ContentProvider auto-init — no `Application` code changes needed
 - **Release builds contain no server/intercept code at all** (no-op swap)
 
@@ -48,6 +48,8 @@ HttpClient(CIO) {
     install(ContentNegotiation) { gson() } // install Decoy BEFORE ContentNegotiation!
 }
 ```
+
+> **Ktor version:** Decoy targets **Ktor 3.x** (tested on 3.3). Because Gradle unifies the Ktor version across your debug classpath, an app still on Ktor 2.x is not supported — bump to Ktor 3.x first. Any engine works (`CIO`, `OkHttp`, …); `installDecoy()` is engine-agnostic.
 
 That's it. The debug artifact transitively brings the inspector server + web UI and starts automatically when the app launches.
 
@@ -215,7 +217,7 @@ The `:app` module demonstrates both the Retrofit (OkHttp) and Ktor client paths 
 ## Roadmap
 
 - Server-side request replay (re-issuing requests through the app's real client configuration)
-- Ktor 3.x support (removing `MockCallFactory`'s InternalAPI dependency)
+- Decouple the embedded inspector server from the consumer's Ktor version (shade/relocate or a dependency-light server) so a single artifact serves apps on any Ktor version — or none
 
 ## License
 
