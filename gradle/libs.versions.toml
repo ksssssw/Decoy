@@ -19,7 +19,7 @@ coroutines = "1.10.2"
 composeBom = "2024.09.03"
 activityCompose = "1.9.2"
 lifecycle = "2.8.6"
-vanniktechPublish = "0.30.0"
+vanniktechPublish = "0.35.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
