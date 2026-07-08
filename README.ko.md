@@ -1,6 +1,15 @@
 # Decoy — Android Network Inspector & Mocker
 
+[![Maven Central](https://img.shields.io/maven-central/v/io.github.ksssssw/decoy-core?label=Maven%20Central)](https://central.sonatype.com/artifact/io.github.ksssssw/decoy-core)
+[![CI](https://github.com/ksssssw/Decoy/actions/workflows/ci.yml/badge.svg)](https://github.com/ksssssw/Decoy/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+![API](https://img.shields.io/badge/API-24%2B-brightgreen.svg)
+![Kotlin](https://img.shields.io/badge/Kotlin-2.2.20-blue.svg?logo=kotlin)
+
 [English](README.md) | **한국어**
+
+<!-- TODO: 웹 인스펙터 UI 히어로 스크린샷/GIF 자리 -->
+<!-- 예: <p align="center"><img src="docs/images/inspector.gif" width="720" alt="Decoy inspector"></p> -->
 
 debug 빌드 전용 Android 네트워크 인스펙터·모커. HTTP 스택당 **두 줄**만 추가하면 앱의 모든 트래픽을 내장 웹 UI에서 인스펙션·모킹할 수 있습니다 — 개발·QA 중 에러 화면이나 엣지케이스 데이터 재현에 최적입니다. release 빌드에는 이 코드가 전혀 포함되지 않습니다.
 

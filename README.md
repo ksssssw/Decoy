@@ -1,6 +1,15 @@
 # Decoy — Android Network Inspector & Mocker
 
+[![Maven Central](https://img.shields.io/maven-central/v/io.github.ksssssw/decoy-core?label=Maven%20Central)](https://central.sonatype.com/artifact/io.github.ksssssw/decoy-core)
+[![CI](https://github.com/ksssssw/Decoy/actions/workflows/ci.yml/badge.svg)](https://github.com/ksssssw/Decoy/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+![API](https://img.shields.io/badge/API-24%2B-brightgreen.svg)
+![Kotlin](https://img.shields.io/badge/Kotlin-2.2.20-blue.svg?logo=kotlin)
+
 **English** | [한국어](README.ko.md)
+
+<!-- TODO: hero screenshot/GIF of the web inspector UI goes here -->
+<!-- e.g. <p align="center"><img src="docs/images/inspector.gif" width="720" alt="Decoy inspector"></p> -->
 
 A debug-only network inspector & mocker for Android. Add **two lines per HTTP stack** and inspect/mock all your app's traffic in a built-in web UI — perfect for reproducing error screens and edge-case data during development and QA. Release builds contain none of it.
 
