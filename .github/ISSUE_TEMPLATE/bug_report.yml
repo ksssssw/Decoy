@@ -1,0 +1,56 @@
+name: Bug report
+description: Report a problem with Decoy
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for reporting! Please fill in as much as you can — it speeds up a fix.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What went wrong, and what did you expect instead?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Add DecoyInterceptor() to …
+        2. Make a request to …
+        3. Open the inspector at localhost:8090 …
+    validations:
+      required: true
+  - type: dropdown
+    id: stack
+    attributes:
+      label: HTTP stack
+      options:
+        - OkHttp / Retrofit (decoy-okhttp)
+        - Ktor client (decoy-ktor)
+        - Both
+    validations:
+      required: true
+  - type: input
+    id: decoy-version
+    attributes:
+      label: Decoy version
+      placeholder: e.g. 0.1.0
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Android version / device / OkHttp or Ktor version / connection method (adb forward, on-device).
+    validations:
+      required: false
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logcat / stack trace
+      description: Any relevant output (tag `Decoy`). Please redact secrets.
+      render: text
+    validations:
+      required: false
