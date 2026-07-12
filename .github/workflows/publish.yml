@@ -23,7 +23,7 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
 
       # The git tag is the source of truth for the release version. Fail loudly if it
       # doesn't match VERSION_NAME in gradle.properties — otherwise a `vX.Y.Z` tag would
