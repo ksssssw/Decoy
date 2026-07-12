@@ -45,6 +45,14 @@ Convention plugins live in `build-logic/convention/src/main/kotlin/` (composite 
 
 SDK levels are catalog versions in `gradle/libs.versions.toml` (`projectCompileSdk`/`projectMinSdk`/`projectTargetSdk`). The root `build.gradle.kts` `apply false` block must stay — it puts AGP/KGP/compose on the root classpath so the convention plugins' `compileOnly` deps resolve. All library modules compile with **explicit API mode**: every public declaration needs an explicit visibility modifier and return type.
 
+## Branching & release
+
+- **`main` = release-only** (production). It always equals the last published release — never commit or open feature/dependency PRs directly against it.
+- **`develop` = integration.** All feature and dependency work targets `develop`; Dependabot is configured with `target-branch: develop`. CI (`.github/workflows/ci.yml`) runs on PRs to any branch and on pushes to `main`/`develop`.
+- **Release flow:** merge `develop` → `main`, then push a `vX.Y.Z` tag **on main**. The tag triggers `.github/workflows/publish.yml`, which stages all library artifacts to Maven Central (finished manually in the Central Portal).
+- **Version is tag-driven, but kept honest:** `VERSION_NAME` in `gradle.properties` is the artifact version. The publish workflow **fails** if the tag (`vX.Y.Z`) doesn't match `VERSION_NAME` — so the release commit must bump `VERSION_NAME` to match the tag before tagging. Maven Central forbids re-publishing an already-released version, so never reuse a tag.
+- **Raising `projectCompileSdk`/AGP is consumer-facing** — it's shared app↔libraries via the catalog and propagates to consumers through AAR metadata. Keep the SDK on a widely-supported baseline; don't chase bleeding-edge API levels (e.g. a Dependabot bump that demands compileSdk 37 + AGP 9 is a red flag, not a routine merge).
+
 ## Runtime architecture
 
 Auto-init → capture → serve, with no host-app code:

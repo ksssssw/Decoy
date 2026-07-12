@@ -228,6 +228,10 @@ The `:app` module demonstrates both the Retrofit (OkHttp) and Ktor client paths 
 - Server-side request replay (re-issuing requests through the app's real client configuration)
 - Decouple the embedded inspector server from the consumer's Ktor version (shade/relocate or a dependency-light server) so a single artifact serves apps on any Ktor version — or none
 
+## Contributing
+
+Branching model and release process are documented in [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## License
 
 MIT
