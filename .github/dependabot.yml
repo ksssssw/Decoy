@@ -8,6 +8,14 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    ignore:
+      # Consumer-facing: the SDK must compile against the *minimum* supported
+      # versions — bumping these forces upgrades on (or breaks) consuming apps.
+      # Bump them manually and deliberately only. See CLAUDE.md "Branching & release".
+      - dependency-name: "org.jetbrains.kotlin*"          # metadata version breaks older-Kotlin consumers (even minor bumps)
+      - dependency-name: "com.squareup.okhttp3:*"         # api() dep of real + noop artifacts (leaks into consumer release builds)
+      - dependency-name: "io.ktor:*"                      # api()/runtime dep; @InternalAPI usage is version-sensitive
+      - dependency-name: "com.android.tools.build:gradle" # AGP/compileSdk policy — see CLAUDE.md
 
   # GitHub Actions used by the workflows in .github/workflows.
   - package-ecosystem: github-actions
