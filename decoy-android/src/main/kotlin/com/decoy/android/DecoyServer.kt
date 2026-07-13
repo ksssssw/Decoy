@@ -37,6 +37,7 @@ internal data class LayoutRequest(val items: List<LayoutItemDto?>?)
 
 /** Info about the host app, shown in the web UI header. */
 internal data class AppInfo(
+    val appName: String,
     val packageName: String,
     val appVersion: String,
     val versionCode: Long,
@@ -72,7 +73,7 @@ internal data class MockRuleDto(
     )
 }
 
-internal class DecoyServer(private val appInfo: AppInfo) {
+internal class DecoyServer(internal val appInfo: AppInfo) {
     private var engine: EmbeddedServer<*, *>? = null
 
     /**
@@ -81,21 +82,39 @@ internal class DecoyServer(private val appInfo: AppInfo) {
      * is taken. Returns the port actually bound.
      */
     fun start(preferredPort: Int = 8090): Int {
-        val port = findAvailablePort(preferredPort)
+        val boundPort = findAvailablePort(preferredPort)
         // Ktor 3.x dropped ApplicationEnvironment.connectors; the actually-bound port
         // is only available via engine.resolvedConnectors() (suspend). We already
-        // pre-bound and confirmed [port] in findAvailablePort and tell CIO to bind
-        // exactly it, so [port] is the source of truth — no connector lookup needed.
-        engine = embeddedServer(CIO, host = "127.0.0.1", port = port) {
-            decoyModule(appInfo) { port }
+        // pre-bound and confirmed [boundPort] in findAvailablePort and tell CIO to bind
+        // exactly it, so [boundPort] is the source of truth — no connector lookup needed.
+        engine = embeddedServer(
+            CIO,
+            configure = {
+                // Rebind the preferred port over TIME_WAIT leftovers after an app
+                // restart instead of silently drifting to the next port (which breaks
+                // an already-issued `adb forward`). SO_REUSEADDR does NOT let two live
+                // listeners share a port, so the multi-app fallback scan still works.
+                // Must match the probe socket's reuseAddress in findAvailablePort —
+                // if only the probe had it, the probe could pass and this bind fail.
+                reuseAddress = true
+                connector {
+                    host = "127.0.0.1"
+                    port = boundPort
+                }
+            },
+        ) {
+            decoyModule(appInfo) { boundPort }
         }.start(wait = false)
-        return port
+        return boundPort
     }
 
     private fun findAvailablePort(preferred: Int): Int {
         for (candidate in preferred until preferred + 10) {
             try {
-                ServerSocket().use { it.bind(InetSocketAddress("127.0.0.1", candidate)) }
+                ServerSocket().use {
+                    it.reuseAddress = true
+                    it.bind(InetSocketAddress("127.0.0.1", candidate))
+                }
                 return candidate
             } catch (_: IOException) {
                 // port in use — try the next one
@@ -240,6 +259,7 @@ internal fun Application.decoyModule(appInfo: AppInfo, boundPort: () -> Int) {
                     "port" to boundPort(),
                     "callCount" to NetworkStore.getAll().size,
                     "mockCount" to MockRepository.getRules().size,
+                    "appName" to appInfo.appName,
                     "packageName" to appInfo.packageName,
                     "appVersion" to appInfo.appVersion,
                     "versionCode" to appInfo.versionCode,

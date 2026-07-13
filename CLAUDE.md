@@ -62,6 +62,10 @@ Auto-init → capture → serve, with no host-app code:
 3. **`DecoyServer`** — Ktor CIO bound to **127.0.0.1 only** (loopback is the security model; never bind wider), preferred port 8090 with fallback +10. Serves the web UI from classpath `resources/web/`, REST under `/api/*`, and pushes new captures over `/ws` via a `NetworkStore` listener. Route logic is extracted into `Application.decoyModule(...)` so tests drive it with Ktor `testApplication` without a socket.
 4. **Web UI** is a single hand-edited file: `decoy-android/src/main/resources/web/index.html` (~1700 lines, inline CSS/JS, no frontend build). Fully offline/self-contained — do not add CDN references.
 
+## Docs
+
+- **`README.md` and `README.ko.md` are translations of each other** — any content change to one must be mirrored in the other in the same change set (structure and sections stay 1:1; only the language differs).
+
 ## Gotchas
 
 - **Gson bypasses Kotlin constructors** — deserialized `MockRule`s can hold nulls in non-null fields, and `copy()` on such an instance throws NPE. Never `copy()` a Gson-created rule; run it through `MockRule.sanitized()` first (see `MockRuleSanitizer.kt`; applied on load in `FileRuleStorage`). Same reason the server DTOs in `DecoyServer.kt` use all-nullable fields with explicit defaults in `.toRule()`.

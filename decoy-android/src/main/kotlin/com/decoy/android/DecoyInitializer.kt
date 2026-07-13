@@ -34,6 +34,9 @@ public class DecoyInitializer : ContentProvider() {
             else @Suppress("DEPRECATION") it.versionCode.toLong()
         } ?: 0L
         return AppInfo(
+            appName = runCatching {
+                ctx.applicationInfo.loadLabel(ctx.packageManager).toString()
+            }.getOrDefault(pkg),
             packageName = pkg,
             appVersion = info?.versionName ?: "?",
             versionCode = versionCode,

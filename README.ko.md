@@ -4,7 +4,7 @@
 [![CI](https://github.com/ksssssw/Decoy/actions/workflows/ci.yml/badge.svg)](https://github.com/ksssssw/Decoy/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 ![API](https://img.shields.io/badge/API-24%2B-brightgreen.svg)
-![Kotlin](https://img.shields.io/badge/Kotlin-2.2.20-blue.svg?logo=kotlin)
+![Kotlin](https://img.shields.io/badge/Kotlin-2.4.0-blue.svg?logo=kotlin)
 
 [English](README.md) | **한국어**
 
@@ -71,12 +71,45 @@ HttpClient(CIO) {
 | PC 브라우저 (권장) | `adb forward tcp:8090 tcp:8090` → `http://localhost:8090` |
 | 기기 브라우저 | `http://localhost:8090` (또는 `DecoyLauncher.getInspectorUrl()`로 인텐트 실행) |
 
-포트 8090이 사용 중이면 8091~8099로 자동 폴백하며, 실제 포트는 Logcat(`Decoy` 태그)에 출력됩니다.
+포트 8090이 사용 중이면 8091~8099로 자동 폴백하며, 실제 포트는 Logcat(`Decoy` 태그)에 출력됩니다. 서버는 `SO_REUSEADDR`로 바인딩하므로, 앱을 재시작해도 이전 연결이 TIME_WAIT에 남아 있는 동안에도 같은 포트를 다시 획득합니다 — 이미 걸어둔 `adb forward`가 재시작 후에도 계속 동작합니다.
 
 ```kotlin
 // 앱에서 인스펙터 URL 얻기 — release에서는 null 반환
 val url: String? = DecoyLauncher.getInspectorUrl()
 ```
+
+### 여러 앱 / 여러 기기에서 쓰기
+
+한 기기에서 Decoy를 쓰는 앱마다 각자 포트를 갖습니다: 먼저 실행된 앱이 8090, 다음이 8091… (실행 순서가 결정). 어떤 앱이 어떤 포트를 잡았는지는:
+
+```bash
+adb logcat -s Decoy
+# Decoy: Inspector for My App (com.example.myapp) running at http://localhost:8090 (loopback only)
+# Decoy: Inspector for Other App (com.example.other) running at http://localhost:8091 (loopback only)
+```
+
+필요한 포트를 각각 포워딩하세요(`adb forward --list`로 현재 매핑 확인). 기기/에뮬레이터가 여러 대라면 시리얼로 지정하고, 호스트 포트가 기기 포트와 같을 필요는 없습니다:
+
+```bash
+adb devices                                        # 시리얼 목록
+adb -s emulator-5554 forward tcp:8090 tcp:8090
+adb -s R3CX90ABCDE forward tcp:8091 tcp:8090       # 호스트 :8091 → 기기 :8090
+```
+
+브라우저 탭 타이틀에 앱 이름과 호스트 측 포트가 표시되므로(예: `My App · Decoy :8091`) 탭이 서로 구분됩니다.
+
+### 트러블슈팅: 인스펙터 접속 불가 (예: 다음날 아침)
+
+`adb forward` 매핑은 기기가 슬립하거나 재연결되거나 호스트 측 adb 데몬이 꼬이면 stale해집니다 — 기기 안의 SDK가 고칠 수 있는 영역이 아닙니다. 아래 순서로 복구하세요:
+
+```bash
+adb forward --list                       # 매핑이 아직 있는지 확인
+adb forward --remove-all                 # stale 매핑 제거 후…
+adb forward tcp:8090 tcp:8090            # …다시 포워딩
+adb kill-server && adb start-server      # 최후의 수단: adb 데몬 재시작 (후 재포워딩)
+```
+
+앱 쪽은 할 일이 없습니다: 앱을 재시작해도 포트가 바뀌지 않으므로(위의 `SO_REUSEADDR` 참고) 같은 포트로 다시 포워딩만 하면 됩니다.
 
 ---
 
@@ -227,6 +260,10 @@ adb shell "cat /proc/net/tcp | grep 1F9A"   # 출력 없음이 정상
 
 - 서버사이드 request replay (앱의 실제 클라이언트 설정을 태우는 재요청)
 - 내장 인스펙터 서버를 소비자 Ktor 버전에서 디커플링 (shade/relocate 또는 의존성 가벼운 서버로 교체) — 단일 아티팩트로 어떤 Ktor 버전이든(혹은 Ktor 미사용 앱까지) 지원
+
+## Contributing
+
+브랜치 모델과 릴리스 프로세스는 [CONTRIBUTING.md](CONTRIBUTING.md)에 문서화되어 있습니다.
 
 ## License
 
