@@ -53,6 +53,7 @@ class DecoyServerRoutesTest {
         application {
             decoyModule(
                 AppInfo(
+                    appName = "Test App",
                     packageName = "com.test.app",
                     appVersion = "1.0",
                     versionCode = 1L,
@@ -292,6 +293,7 @@ class DecoyServerRoutesTest {
     fun `status endpoint reports app info and counts`() = apiTest {
         NetworkStore.add(capturedCall("c1"))
         val status = gson.fromJson(client.get("/api/status").bodyAsText(), Map::class.java)
+        assertEquals("Test App", status["appName"])
         assertEquals("com.test.app", status["packageName"])
         assertEquals(8090.0, status["port"])
         assertEquals(1.0, status["callCount"])

@@ -779,15 +779,22 @@ function connectWS() {
 
 function setStatus(ok) {
   document.getElementById('status-dot').style.background = ok ? 'var(--green)' : 'var(--red)';
-  document.getElementById('status-label').textContent = ok ? 'Inspector Active' : 'Reconnecting…';
+  const label = document.getElementById('status-label');
+  label.textContent = ok ? 'Inspector Active' : 'Reconnecting…';
+  label.title = ok ? '' : 'If this never recovers, the adb forward is stale:\nadb forward --remove-all, re-forward — still stuck? adb kill-server && adb start-server';
 }
 
 async function loadAppInfo() {
   try {
     const s = await api.status();
     if (!s) return;
+    const name = s.appName || s.packageName || '—';
+    // location.port (the host-side forwarded port), not s.port: with
+    // `adb forward tcp:9001 tcp:8090` the host port is what tells tabs apart.
+    const port = location.port || (location.protocol === 'https:' ? 443 : 80);
+    document.title = `${name} · Decoy :${port}`;
     const el = document.getElementById('app-info');
-    el.querySelector('.pkg').textContent = s.packageName || '—';
+    el.querySelector('.pkg').textContent = name;
     el.querySelector('.ver').textContent = s.appVersion ? `v${s.appVersion} (${s.versionCode})` : '';
     el.title = `${s.packageName}\nversion ${s.appVersion} (${s.versionCode})\n${s.deviceModel} · Android API ${s.sdkInt}`;
   } catch {}

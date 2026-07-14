@@ -12,7 +12,8 @@ internal class RealDecoy(
     override fun start(port: Int) {
         this.port = server.start(port)
         running = true
-        android.util.Log.i("Decoy", "Inspector running at http://localhost:${this.port} (loopback only)")
+        val who = "${server.appInfo.appName} (${server.appInfo.packageName})"
+        android.util.Log.i("Decoy", "Inspector for $who running at http://localhost:${this.port} (loopback only)")
         android.util.Log.i("Decoy", "▶ On your PC: adb forward tcp:${this.port} tcp:${this.port} → open http://localhost:${this.port}")
     }
 

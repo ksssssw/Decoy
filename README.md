@@ -4,7 +4,7 @@
 [![CI](https://github.com/ksssssw/Decoy/actions/workflows/ci.yml/badge.svg)](https://github.com/ksssssw/Decoy/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 ![API](https://img.shields.io/badge/API-24%2B-brightgreen.svg)
-![Kotlin](https://img.shields.io/badge/Kotlin-2.2.20-blue.svg?logo=kotlin)
+![Kotlin](https://img.shields.io/badge/Kotlin-2.4.0-blue.svg?logo=kotlin)
 
 **English** | [한국어](README.ko.md)
 
@@ -71,12 +71,45 @@ The server binds to the device's **loopback (127.0.0.1) only**. To connect:
 | PC browser (recommended) | `adb forward tcp:8090 tcp:8090` → `http://localhost:8090` |
 | On-device browser | `http://localhost:8090` (or launch an intent via `DecoyLauncher.getInspectorUrl()`) |
 
-If port 8090 is taken, it automatically falls back to 8091–8099; the actual port is printed to Logcat (tag `Decoy`).
+If port 8090 is taken, it automatically falls back to 8091–8099; the actual port is printed to Logcat (tag `Decoy`). The server binds with `SO_REUSEADDR`, so an app restart re-acquires its previous port even while old connections linger in TIME_WAIT — an already-issued `adb forward` keeps working across restarts.
 
 ```kotlin
 // Get the inspector URL from inside the app — returns null in release
 val url: String? = DecoyLauncher.getInspectorUrl()
 ```
+
+### Multiple apps or devices
+
+Each Decoy-enabled app on a device gets its own port: the first to launch binds 8090, the next 8091, and so on (launch order decides). To see which app owns which port:
+
+```bash
+adb logcat -s Decoy
+# Decoy: Inspector for My App (com.example.myapp) running at http://localhost:8090 (loopback only)
+# Decoy: Inspector for Other App (com.example.other) running at http://localhost:8091 (loopback only)
+```
+
+Forward each port you need (`adb forward --list` shows current mappings). With several devices/emulators, target each by serial — the host port doesn't have to match the device port:
+
+```bash
+adb devices                                        # list serials
+adb -s emulator-5554 forward tcp:8090 tcp:8090
+adb -s R3CX90ABCDE forward tcp:8091 tcp:8090       # host :8091 → device :8090
+```
+
+Every browser tab titles itself with the app's name and the host-side port (e.g. `My App · Decoy :8091`), so tabs stay distinguishable.
+
+### Troubleshooting: inspector unreachable (e.g. the next morning)
+
+`adb forward` mappings go stale when the device sleeps, reconnects, or the host-side adb daemon wedges — the SDK on the device can't fix that end. Recover in this order:
+
+```bash
+adb forward --list                       # is the mapping still there?
+adb forward --remove-all                 # drop stale mappings…
+adb forward tcp:8090 tcp:8090            # …and re-issue
+adb kill-server && adb start-server      # last resort: restart the adb daemon (then re-forward)
+```
+
+The app side needs nothing: restarting the app no longer changes its port (see `SO_REUSEADDR` above), so a re-issued forward to the same port just works.
 
 ---
 
