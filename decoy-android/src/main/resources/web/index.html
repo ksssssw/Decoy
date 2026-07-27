@@ -155,9 +155,14 @@ main { display: flex; flex-direction: column; height: 100vh; padding-top: 52px; 
 /* ── Traffic view ────────────────────────────────────────── */
 #view-traffic { display: flex; }
 .req-panel {
-  display: flex; flex-direction: column; width: 300px; flex-shrink: 0;
-  background: var(--bg-panel); border-right: 1px solid var(--border-default);
+  display: flex; flex-direction: column; width: var(--sidebar-w, 320px); flex-shrink: 0;
+  background: var(--bg-panel);
 }
+#panel-resizer { position: relative; width: 1px; flex-shrink: 0; background: var(--border-default); cursor: col-resize; z-index: 20; transition: background var(--duration-fast), box-shadow var(--duration-fast); }
+#panel-resizer::before { content: ''; position: absolute; top: 0; bottom: 0; left: -5px; right: -5px; }
+#panel-resizer:hover, #panel-resizer.dragging { background: var(--accent-emphasis); box-shadow: 0 0 0 1px var(--accent-emphasis); }
+body.resizing { cursor: col-resize; user-select: none; }
+body.resizing #detail-section { pointer-events: none; }
 .panel-bar {
   height: 38px; display: flex; align-items: center; justify-content: space-between;
   padding: 0 14px; border-bottom: 1px solid var(--border-default); background: var(--bg-subtle);
@@ -405,7 +410,8 @@ main { display: flex; flex-direction: column; height: 100vh; padding-top: 52px; 
   .top-tabs { margin-left: 8px; }
   .top-tabs button { padding: 0 10px; }
   #app-info .pkg { max-width: 130px; }
-  .req-panel { width: 100%; border-right: none; }
+  .req-panel { width: 100%; }
+  #panel-resizer { display: none; }
   #detail-section { display: none; }
   #detail-section.mobile-active {
     display: flex; position: fixed; left: 0; right: 0; top: 52px; bottom: 0;
@@ -456,6 +462,8 @@ main { display: flex; flex-direction: column; height: 100vh; padding-top: 52px; 
       </div>
       <div id="request-list"></div>
     </section>
+
+    <div id="panel-resizer" title="Drag to resize — double-click to reset"></div>
 
     <section id="detail-section">
       <div class="detail-tabs">
@@ -742,6 +750,63 @@ function toggleTheme() {
   applyTheme(next);
   try { localStorage.setItem('decoy-theme', next); } catch {}
   setTimeout(() => document.documentElement.classList.remove('theming'), 300);
+}
+
+// ══════════════════════════════════════════════════
+// SIDEBAR RESIZE
+// ══════════════════════════════════════════════════
+const SIDEBAR_W_KEY = 'decoy-sidebar-w';
+const SIDEBAR_MIN = 240, SIDEBAR_DEFAULT = 320;
+
+function sidebarMax() { return Math.min(640, Math.floor(window.innerWidth * 0.6)); }
+
+/** Clamps, applies and returns the sidebar width. */
+function setSidebarWidth(px) {
+  const w = Math.max(SIDEBAR_MIN, Math.min(sidebarMax(), Math.round(px)));
+  document.documentElement.style.setProperty('--sidebar-w', w + 'px');
+  return w;
+}
+
+function initSidebarResize() {
+  const handle = document.getElementById('panel-resizer');
+  try {
+    const saved = parseInt(localStorage.getItem(SIDEBAR_W_KEY), 10);
+    if (saved) setSidebarWidth(saved); // re-clamped for the current window
+  } catch {}
+
+  handle.addEventListener('pointerdown', e => {
+    if (window.matchMedia('(max-width: 767px)').matches) return;
+    e.preventDefault();
+    handle.setPointerCapture(e.pointerId);
+    handle.classList.add('dragging');
+    document.body.classList.add('resizing');
+    const startX = e.clientX;
+    const startW = document.querySelector('.req-panel').getBoundingClientRect().width;
+    let w = startW;
+    const move = ev => { w = setSidebarWidth(startW + (ev.clientX - startX)); };
+    const up = () => {
+      handle.classList.remove('dragging');
+      document.body.classList.remove('resizing');
+      handle.removeEventListener('pointermove', move);
+      handle.removeEventListener('pointerup', up);
+      handle.removeEventListener('pointercancel', up);
+      try { localStorage.setItem(SIDEBAR_W_KEY, String(w)); } catch {}
+    };
+    handle.addEventListener('pointermove', move);
+    handle.addEventListener('pointerup', up);
+    handle.addEventListener('pointercancel', up);
+  });
+
+  handle.addEventListener('dblclick', () => {
+    document.documentElement.style.removeProperty('--sidebar-w');
+    try { localStorage.removeItem(SIDEBAR_W_KEY); } catch {}
+  });
+
+  // Keep a persisted width inside bounds when the window shrinks
+  window.addEventListener('resize', () => {
+    const cur = parseInt(document.documentElement.style.getPropertyValue('--sidebar-w'), 10);
+    if (cur) setSidebarWidth(cur);
+  });
 }
 
 // ══════════════════════════════════════════════════
@@ -1711,6 +1776,7 @@ async function init() {
   renderDetail();
   renderRules();
   initDnD();
+  initSidebarResize();
   document.getElementById('status-port').textContent = location.host;
 
   try {
