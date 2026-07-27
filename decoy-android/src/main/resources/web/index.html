@@ -341,8 +341,34 @@ body.resizing #detail-section { pointer-events: none; }
 .modal-head .close { color: var(--fg-subtle); display: flex; transition: color var(--duration-fast); }
 .modal-head .close:hover { color: var(--fg-default); }
 .modal-card form { padding: 20px; display: flex; flex-direction: column; gap: 18px; }
-.form-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; }
-.form-grid-3 { display: grid; grid-template-columns: 1fr 1.4fr; gap: 16px; }
+.form-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+/* Rule modal: wide, fixed head/foot, scrolling form, resizable */
+.modal-card--wide {
+  max-width: none; width: min(920px, calc(100vw - 48px)); height: min(780px, 92vh);
+  max-height: 92vh; overflow: hidden; display: flex; flex-direction: column; position: relative;
+}
+.modal-card--wide .modal-head { position: static; flex-shrink: 0; }
+.modal-card--wide form { flex: 1; min-height: 0; overflow-y: auto; }
+.modal-card--wide > .modal-foot { flex-shrink: 0; padding: 12px 20px; background: var(--bg-subtle); }
+.modal-card--max { width: calc(100vw - 32px) !important; height: calc(100vh - 32px) !important; max-height: none; }
+.modal-head-actions { display: flex; align-items: center; gap: 10px; }
+.modal-head-actions button { color: var(--fg-subtle); display: flex; padding: 2px; border-radius: var(--radius-sm); transition: color var(--duration-fast); }
+.modal-head-actions button:hover { color: var(--fg-default); }
+.modal-grip { position: absolute; right: 0; bottom: 0; width: 18px; height: 18px; cursor: nwse-resize; z-index: 6; }
+.modal-grip::after { content: ''; position: absolute; right: 4px; bottom: 4px; width: 8px; height: 8px; border-right: 2px solid var(--border-emphasis); border-bottom: 2px solid var(--border-emphasis); border-radius: 1px; transition: border-color var(--duration-fast); }
+.modal-grip:hover::after { border-color: var(--accent-emphasis); }
+body.modal-resizing { cursor: nwse-resize; user-select: none; }
+.rule-form-grid { display: flex; flex-direction: column; gap: 18px; flex: 1; min-height: 0; }
+.rule-form-config { display: flex; flex-direction: column; gap: 18px; align-content: start; }
+.rule-form-editors { display: flex; flex-direction: column; gap: 18px; flex: 1; min-height: 0; }
+.field-body { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.field-body .editor { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.field-body .editor textarea { flex: 1; min-height: 240px; }
+#f-headers { min-height: 100px; }
+@media (min-width: 960px) {
+  .rule-form-grid { display: grid; grid-template-columns: 320px 1fr; align-items: stretch; }
+}
 .field label { display: block; font-size: var(--text-2xs); font-weight: 600; text-transform: uppercase; letter-spacing: .5px; color: var(--fg-subtle); margin-bottom: 6px; }
 .field input[type=text], .field input[type=number], .field select {
   width: 100%; background: var(--bg-inset); outline: none;
@@ -358,6 +384,7 @@ body.resizing #detail-section { pointer-events: none; }
 .range-row { display: flex; justify-content: space-between; align-items: center; }
 .range-row span { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--accent-fg); }
 .quick-codes { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+.rule-form-config > .quick-codes { margin-top: -10px; justify-content: flex-end; }
 .quick-codes button { font-family: var(--font-mono); font-size: var(--text-2xs); padding: 2px 6px; border-radius: var(--radius-sm); background: var(--bg-active); color: var(--fg-subtle); border: 1px solid transparent; transition: color .12s, border-color .12s; }
 .quick-codes button:hover { color: var(--accent-fg); border-color: color-mix(in srgb, var(--accent-fg) 40%, transparent); }
 .editor { background: var(--bg-inset); border: 1px solid var(--border-emphasis); border-radius: var(--radius-md); overflow: hidden; }
@@ -420,7 +447,8 @@ body.resizing #detail-section { pointer-events: none; }
   #detail-back { display: flex; color: var(--fg-subtle); margin-right: 4px; }
   #detail-back:hover { color: var(--fg-default); }
   .meta-grid { grid-template-columns: repeat(2, 1fr); }
-  .form-grid, .form-grid-3 { grid-template-columns: 1fr; }
+  .modal-card--wide { width: calc(100vw - 24px); }
+  .modal-grip { display: none; }
   .rules-wrap { padding: 18px 12px 60px; }
 }
 </style>
@@ -520,29 +548,34 @@ body.resizing #detail-section { pointer-events: none; }
 
 <!-- ── RULE MODAL ── -->
 <div id="modal" class="modal-scrim hidden">
-  <div class="modal-card">
+  <div id="rule-modal-card" class="modal-card modal-card--wide">
     <div class="modal-head">
       <h2 id="modal-title">Create Mock Rule</h2>
-      <button class="close" onclick="closeModal()"><svg class="icon" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
-    </div>
-    <form onsubmit="saveMock(event)">
-      <div class="form-grid">
-        <div class="field">
-          <label>URL Pattern (Regex)</label>
-          <input id="f-pattern" type="text" required placeholder="e.g. /posts or https://api\.example\.com/users/\d+"/>
-        </div>
-        <div class="field">
-          <label>Method</label>
-          <select id="f-method">
-            <option value="*">ANY</option>
-            <option>GET</option><option>POST</option><option>PUT</option><option>PATCH</option><option>DELETE</option>
-          </select>
-        </div>
+      <div class="modal-head-actions">
+        <button type="button" id="modal-max-btn" onclick="toggleModalMax()" title="Maximize"><svg class="icon" viewBox="0 0 24 24"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"/></svg></button>
+        <button class="close" onclick="closeModal()"><svg class="icon" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
       </div>
-      <div class="form-grid-3">
-        <div class="field">
-          <label>Status Code</label>
-          <input id="f-code" type="number" value="200" min="100" max="599"/>
+    </div>
+    <form id="rule-form" onsubmit="saveMock(event)">
+      <div class="rule-form-grid">
+        <div class="rule-form-config">
+          <div class="field">
+            <label>URL Pattern (Regex)</label>
+            <input id="f-pattern" type="text" required placeholder="e.g. /posts or https://api\.example\.com/users/\d+"/>
+          </div>
+          <div class="form-grid-2">
+            <div class="field">
+              <label>Method</label>
+              <select id="f-method">
+                <option value="*">ANY</option>
+                <option>GET</option><option>POST</option><option>PUT</option><option>PATCH</option><option>DELETE</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Status Code</label>
+              <input id="f-code" type="number" value="200" min="100" max="599"/>
+            </div>
+          </div>
           <div class="quick-codes">
             <button type="button" onclick="setCode(200)">200</button>
             <button type="button" onclick="setCode(201)">201</button>
@@ -551,55 +584,59 @@ body.resizing #detail-section { pointer-events: none; }
             <button type="button" onclick="setCode(404)">404</button>
             <button type="button" onclick="setCode(500)">500</button>
           </div>
-        </div>
-        <div class="field">
-          <div class="range-row">
-            <label style="margin-bottom:0;">Network Delay</label>
-            <span id="delay-val">0ms</span>
+          <div class="field">
+            <div class="range-row">
+              <label style="margin-bottom:0;">Network Delay</label>
+              <span id="delay-val">0ms</span>
+            </div>
+            <input id="f-delay" type="range" min="0" max="10000" step="100" value="0"
+              oninput="document.getElementById('delay-val').textContent=this.value+'ms'"/>
           </div>
-          <input id="f-delay" type="range" min="0" max="10000" step="100" value="0"
-            oninput="document.getElementById('delay-val').textContent=this.value+'ms'"/>
-        </div>
-      </div>
-      <div class="field">
-        <label>Response Body (JSON)</label>
-        <div class="editor">
-          <div class="editor-bar">
-            <span class="label">Body · JSON</span>
-            <button type="button" class="fmt" onclick="formatModalJson()">Format</button>
+          <div class="field">
+            <label>Description</label>
+            <input id="f-desc" type="text" placeholder="e.g. Login failure screen — 401 response"/>
+            <p class="hint">Shown in the rule list — write it so designers/PMs understand what this mocks.</p>
           </div>
-          <textarea id="f-body" rows="6" placeholder='{&#10;  "status": "success",&#10;  "data": {}&#10;}'></textarea>
+          <div class="field">
+            <label>Group</label>
+            <input id="f-group" type="text" list="group-list" placeholder="e.g. Login screen"/>
+            <datalist id="group-list"></datalist>
+            <p class="hint">You can also drag rules between groups in the list.</p>
+          </div>
+          <input type="hidden" id="f-id"/>
+        </div>
+        <div class="rule-form-editors">
+          <div class="field field-body">
+            <label>Response Body (JSON)</label>
+            <div class="editor">
+              <div class="editor-bar">
+                <span class="label">Body · JSON</span>
+                <button type="button" class="fmt" onclick="formatModalJson()">Format</button>
+              </div>
+              <textarea id="f-body" rows="6" placeholder='{&#10;  "status": "success",&#10;  "data": {}&#10;}'></textarea>
+            </div>
+          </div>
+          <div class="field">
+            <label>Response Headers</label>
+            <div class="editor">
+              <div class="editor-bar">
+                <span class="label">Headers</span>
+              </div>
+              <textarea id="f-headers" rows="2" placeholder="X-Custom-Header: value&#10;Cache-Control: no-store"></textarea>
+            </div>
+            <p class="hint">One per line as "Name: Value". Content-Type defaults to application/json.</p>
+          </div>
         </div>
       </div>
-      <div class="field">
-        <label>Response Headers</label>
-        <div class="editor">
-          <textarea id="f-headers" rows="2" placeholder="X-Custom-Header: value&#10;Cache-Control: no-store"></textarea>
-        </div>
-        <p class="hint">One per line as "Name: Value". Content-Type defaults to application/json.</p>
-      </div>
-      <div class="form-grid">
-        <div class="field">
-          <label>Description</label>
-          <input id="f-desc" type="text" placeholder="e.g. Login failure screen — 401 response"/>
-          <p class="hint">Shown in the rule list — write it so designers/PMs understand what this mocks.</p>
-        </div>
-        <div class="field">
-          <label>Group</label>
-          <input id="f-group" type="text" list="group-list" placeholder="e.g. Login screen"/>
-          <datalist id="group-list"></datalist>
-          <p class="hint">You can also drag rules between groups in the list.</p>
-        </div>
-      </div>
-      <input type="hidden" id="f-id"/>
 
       <div id="form-error" class="hidden"></div>
-
-      <div class="modal-foot">
-        <button type="button" class="btn-text" onclick="closeModal()">Cancel</button>
-        <button type="submit" class="btn btn-primary" style="padding:8px 26px;">Save Rule</button>
-      </div>
     </form>
+
+    <div class="modal-foot">
+      <button type="button" class="btn-text" onclick="closeModal()">Cancel</button>
+      <button type="submit" form="rule-form" class="btn btn-primary" style="padding:8px 26px;">Save Rule</button>
+    </div>
+    <div id="modal-resize" class="modal-grip" title="Drag to resize"></div>
   </div>
 </div>
 
@@ -677,6 +714,7 @@ const S = {
   _undo: null,          // {rules: [...]} — pre-import snapshot, cleared on next mutation
   _flashId: null,       // newest request id → row flash animation
   _renameGroup: null,   // group name to auto-edit after next render
+  _modalReturnFocus: null, // element to refocus when the rule modal closes
   drag: null,           // {type:'rule', id} | {type:'block', index}
 };
 
@@ -1621,6 +1659,7 @@ function fillForm(m) {
 
 function openCreateModal(pre={}) {
   S.editId = null;
+  S._modalReturnFocus = document.activeElement;
   showFormError(null);
   document.getElementById('modal-title').textContent = 'Create Mock Rule';
   fillForm(pre);
@@ -1632,16 +1671,62 @@ function editMock(id) {
   const m = S.mocks.find(x=>x.id===id);
   if (!m) return;
   S.editId = id;
+  S._modalReturnFocus = document.activeElement;
   showFormError(null);
   document.getElementById('modal-title').textContent = 'Edit Mock Rule';
   fillForm(m);
   document.getElementById('modal').classList.remove('hidden');
+  document.getElementById('f-pattern').focus();
 }
 
 function closeModal() {
   document.getElementById('modal').classList.add('hidden');
   showFormError(null);
   S.editId = null;
+  // Reset maximize / drag-resize state so the next open starts at defaults
+  const card = document.getElementById('rule-modal-card');
+  card.classList.remove('modal-card--max');
+  card.style.width = '';
+  card.style.height = '';
+  document.getElementById('modal-max-btn').title = 'Maximize';
+  const back = S._modalReturnFocus;
+  S._modalReturnFocus = null;
+  if (back && document.contains(back)) back.focus?.();
+}
+
+function toggleModalMax() {
+  const card = document.getElementById('rule-modal-card');
+  const on = card.classList.toggle('modal-card--max');
+  document.getElementById('modal-max-btn').title = on ? 'Restore size' : 'Maximize';
+}
+
+function initModalResize() {
+  const grip = document.getElementById('modal-resize');
+  const card = document.getElementById('rule-modal-card');
+  grip.addEventListener('pointerdown', e => {
+    if (card.classList.contains('modal-card--max')) return;
+    e.preventDefault();
+    grip.setPointerCapture(e.pointerId);
+    document.body.classList.add('modal-resizing');
+    const startX = e.clientX, startY = e.clientY;
+    const rect = card.getBoundingClientRect();
+    const move = ev => {
+      // The scrim centers the card, so growth is symmetric around the center
+      const w = Math.max(560, Math.min(window.innerWidth - 32, rect.width + (ev.clientX - startX)));
+      const h = Math.max(420, Math.min(window.innerHeight - 32, rect.height + (ev.clientY - startY)));
+      card.style.width = w + 'px';
+      card.style.height = h + 'px';
+    };
+    const up = () => {
+      document.body.classList.remove('modal-resizing');
+      grip.removeEventListener('pointermove', move);
+      grip.removeEventListener('pointerup', up);
+      grip.removeEventListener('pointercancel', up);
+    };
+    grip.addEventListener('pointermove', move);
+    grip.addEventListener('pointerup', up);
+    grip.addEventListener('pointercancel', up);
+  });
 }
 
 function setCode(c) { document.getElementById('f-code').value = c; }
@@ -1777,6 +1862,7 @@ async function init() {
   renderRules();
   initDnD();
   initSidebarResize();
+  initModalResize();
   document.getElementById('status-port').textContent = location.host;
 
   try {
