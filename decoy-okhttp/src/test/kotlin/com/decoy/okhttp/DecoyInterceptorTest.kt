@@ -215,6 +215,33 @@ class DecoyInterceptorTest {
     }
 
     @Test
+    fun `a throwing store listener never fails the app's request`() {
+        val listener: (com.decoy.core.CapturedRequest) -> Unit = { throw IllegalStateException("boom") }
+        NetworkStore.addListener(listener)
+        try {
+            server.enqueue(MockResponse().setBody("""{"ok":1}""").setHeader("Content-Type", "application/json"))
+            val response = execute(Request.Builder().url(server.url("/posts")).build())
+            assertEquals(200, response.code)
+            assertEquals("""{"ok":1}""", response.body?.string())
+        } finally {
+            NetworkStore.removeListener(listener)
+        }
+    }
+
+    @Test
+    fun `mock rule with invalid header entries still serves the mock`() {
+        // Bypasses server-side validation, like a stale persisted rule would
+        MockRepository.addRule(mockRule("/posts").copy(
+            responseHeaders = mapOf("X-Ok" to "fine", "bad name" to "v", "X-Bad" to "줄바꿈")
+        ))
+        val response = execute(Request.Builder().url(server.url("/posts")).build())
+
+        assertEquals(418, response.code)
+        assertEquals("fine", response.header("X-Ok"))
+        assertEquals(0, server.requestCount)
+    }
+
+    @Test
     fun `still-compressed body is skipped with a marker`() {
         server.enqueue(MockResponse().setBody("not-really-gzip")
             .setHeader("Content-Type", "application/json")

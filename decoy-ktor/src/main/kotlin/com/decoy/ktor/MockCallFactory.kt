@@ -37,7 +37,9 @@ internal suspend fun createMockCall(
             if (rule.responseHeaders.keys.none { it.equals("Content-Type", ignoreCase = true) }) {
                 append(HttpHeaders.ContentType, "application/json")
             }
-            rule.responseHeaders.forEach { (k, v) -> append(k, v) }
+            // Stale persisted rules may predate server-side header validation —
+            // skip a bad entry rather than fail the host app's call.
+            rule.responseHeaders.forEach { (k, v) -> runCatching { append(k, v) } }
         },
         version = HttpProtocolVersion.HTTP_1_1,
         body = ByteReadChannel(rule.responseBody.toByteArray()),
