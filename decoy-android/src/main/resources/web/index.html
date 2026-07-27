@@ -359,11 +359,13 @@ body.resizing #detail-section { pointer-events: none; }
 .modal-grip::after { content: ''; position: absolute; right: 4px; bottom: 4px; width: 8px; height: 8px; border-right: 2px solid var(--border-emphasis); border-bottom: 2px solid var(--border-emphasis); border-radius: 1px; transition: border-color var(--duration-fast); }
 .modal-grip:hover::after { border-color: var(--accent-emphasis); }
 body.modal-resizing { cursor: nwse-resize; user-select: none; }
-.rule-form-grid { display: flex; flex-direction: column; gap: 18px; flex: 1; min-height: 0; }
-.rule-form-config { display: flex; flex-direction: column; gap: 18px; align-content: start; }
-.rule-form-editors { display: flex; flex-direction: column; gap: 18px; flex: 1; min-height: 0; }
-.field-body { display: flex; flex-direction: column; flex: 1; min-height: 0; }
-.field-body .editor { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+/* No min-height:0 anywhere in this chain — when the modal is small the
+   form scrolls instead of the editors collapsing below their floors. */
+.rule-form-grid { display: flex; flex-direction: column; gap: 18px; flex: 1 0 auto; }
+.rule-form-config { display: flex; flex-direction: column; gap: 18px; }
+.rule-form-editors { display: flex; flex-direction: column; gap: 18px; flex: 1 0 auto; }
+.field-body { display: flex; flex-direction: column; flex: 1 0 auto; }
+.field-body .editor { flex: 1 0 auto; display: flex; flex-direction: column; min-height: 272px; }
 .field-body .editor textarea { flex: 1; min-height: 240px; }
 #f-headers { min-height: 100px; }
 @media (min-width: 960px) {
@@ -524,7 +526,7 @@ body.modal-resizing { cursor: nwse-resize; user-select: none; }
           <span id="rules-count">0 Rules Active</span>
           <div class="master-toggle" title="Enable/disable all rules">
             <span>All</span>
-            <div id="master-switch" class="switch" onclick="toggleAllRules()" role="switch"><div class="thumb"></div></div>
+            <div id="master-switch" class="switch" onclick="toggleAllRules()" role="switch" tabindex="0" aria-checked="false"><div class="thumb"></div></div>
           </div>
           <button class="btn btn-outline" onclick="openExportModal()" title="Download all or selected rules as JSON">
             <svg class="icon" viewBox="0 0 24 24"><path d="M12 3v12M12 15l-4-4M12 15l4-4M4 17v3h16v-3"/></svg>Export
@@ -1160,7 +1162,7 @@ function ruleRow(m) {
   return `<div class="rule-grid rule-row${m.isEnabled?'':' off'}" draggable="true" data-id="${m.id}">
     <div class="grip" title="Drag to move / reorder"><svg class="icon" style="width:13px;height:13px;" viewBox="0 0 24 24"><circle cx="9" cy="6" r="1.2"/><circle cx="15" cy="6" r="1.2"/><circle cx="9" cy="12" r="1.2"/><circle cx="15" cy="12" r="1.2"/><circle cx="9" cy="18" r="1.2"/><circle cx="15" cy="18" r="1.2"/></svg></div>
     <div>
-      <div class="switch${m.isEnabled?' on':''}" onclick="toggleMock('${m.id}')" role="switch" aria-checked="${m.isEnabled}"><div class="thumb"></div></div>
+      <div class="switch${m.isEnabled?' on':''}" onclick="toggleMock('${m.id}')" role="switch" tabindex="0" aria-checked="${m.isEnabled}"><div class="thumb"></div></div>
     </div>
     <div style="display:flex;align-items:center;gap:5px;">${methodBadge(m.method)}${dupBadge}</div>
     <div style="min-width:0;">
@@ -1190,7 +1192,7 @@ function groupHeader(block, i, showAsGroup) {
     <button class="gexport-btn" onclick="event.stopPropagation(); exportGroup(${i})" title="Export this group as JSON"><svg class="icon" style="width:13px;height:13px;" viewBox="0 0 24 24"><path d="M12 3v12M12 15l-4-4M12 15l4-4M4 17v3h16v-3"/></svg></button>
     <span class="gmeta">${on}/${block.rules.length} on</span>
     <span class="spacer"></span>
-    <div class="switch${swState}" onclick="event.stopPropagation(); toggleGroup(${i})" role="switch" aria-checked="${on===block.rules.length}" title="Toggle whole group"><div class="thumb"></div></div>
+    <div class="switch${swState}" onclick="event.stopPropagation(); toggleGroup(${i})" role="switch" tabindex="0" aria-checked="${on===block.rules.length}" title="Toggle whole group"><div class="thumb"></div></div>
   </div>`;
 }
 
@@ -1200,6 +1202,7 @@ function renderRules() {
 
   const master = document.getElementById('master-switch');
   master.className = 'switch' + (S.mocks.length && active === S.mocks.length ? ' on' : active > 0 ? ' mixed' : '');
+  master.setAttribute('aria-checked', S.mocks.length > 0 && active === S.mocks.length ? 'true' : active > 0 ? 'mixed' : 'false');
 
   const el = document.getElementById('rules-list');
   if (!S.mocks.length) {
@@ -1887,6 +1890,12 @@ async function init() {
     if (e.target === document.getElementById('export-modal')) closeExportModal();
   });
   document.addEventListener('keydown', e => {
+    // Space/Enter operate the custom switches (divs, so no native key handling)
+    if ((e.key === 'Enter' || e.key === ' ') && e.target.getAttribute && e.target.getAttribute('role') === 'switch') {
+      e.preventDefault();
+      e.target.click();
+      return;
+    }
     if (e.key !== 'Escape') return;
     // Modals take precedence — don't also dismiss the detail panel behind them
     if (!document.getElementById('import-modal').classList.contains('hidden')) closeImportModal();
