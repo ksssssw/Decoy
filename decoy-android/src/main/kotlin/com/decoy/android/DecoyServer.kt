@@ -75,14 +75,29 @@ internal data class MockRuleDto(
 
 internal class DecoyServer(internal val appInfo: AppInfo) {
     private var engine: EmbeddedServer<*, *>? = null
+    private var currentPort: Int = -1
 
     /**
      * Starts the inspector server bound to loopback only — never reachable from
      * other hosts on the network. Falls back to the next ports if [preferredPort]
      * is taken. Returns the port actually bound.
+     *
+     * Idempotent: a second start() returns the already-bound port instead of
+     * orphaning the running engine (which would leak its listener socket and
+     * silently move the UI off an already-issued `adb forward`). Out-of-range
+     * ports fall back to the default — reachable via the public Decoy.start(),
+     * this must degrade gracefully, never throw into the host app.
      */
-    fun start(preferredPort: Int = 8090): Int {
-        val boundPort = findAvailablePort(preferredPort)
+    @Synchronized
+    fun start(preferredPort: Int = DEFAULT_PORT): Int {
+        engine?.let { return currentPort }
+        val base = if (preferredPort in 1024..65526) {
+            preferredPort
+        } else {
+            android.util.Log.w("Decoy", "Invalid port $preferredPort — using $DEFAULT_PORT")
+            DEFAULT_PORT
+        }
+        val boundPort = findAvailablePort(base)
         // Ktor 3.x dropped ApplicationEnvironment.connectors; the actually-bound port
         // is only available via engine.resolvedConnectors() (suspend). We already
         // pre-bound and confirmed [boundPort] in findAvailablePort and tell CIO to bind
@@ -105,6 +120,7 @@ internal class DecoyServer(internal val appInfo: AppInfo) {
         ) {
             decoyModule(appInfo) { boundPort }
         }.start(wait = false)
+        currentPort = boundPort
         return boundPort
     }
 
@@ -116,8 +132,8 @@ internal class DecoyServer(internal val appInfo: AppInfo) {
                     it.bind(InetSocketAddress("127.0.0.1", candidate))
                 }
                 return candidate
-            } catch (_: IOException) {
-                // port in use — try the next one
+            } catch (_: Exception) {
+                // in use or unbindable (IOException, SecurityException, …) — try the next one
             }
         }
         // Failing loudly beats silently returning a taken port: the initializer
@@ -125,9 +141,15 @@ internal class DecoyServer(internal val appInfo: AppInfo) {
         throw IOException("Decoy: no free port in $preferred..${preferred + 9}")
     }
 
+    @Synchronized
     fun stop() {
         engine?.stop(1000, 2000)
         engine = null
+        currentPort = -1
+    }
+
+    private companion object {
+        const val DEFAULT_PORT = 8090
     }
 }
 

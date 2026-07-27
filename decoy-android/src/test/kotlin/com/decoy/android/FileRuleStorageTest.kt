@@ -72,4 +72,31 @@ class FileRuleStorageTest {
         storage().save(listOf(rule("a")))
         assertTrue(rulesFile().exists())
     }
+
+    @Test
+    fun `failed rename keeps the previous rules and removes the tmp file`() {
+        val storage = storage()
+        storage.save(listOf(rule("original")))
+
+        // Make rules.json un-replaceable: a non-empty directory defeats rename()
+        val target = rulesFile()
+        val backup = File(tmp.root, "backup.json")
+        target.copyTo(backup)
+        target.delete()
+        target.mkdirs()
+        File(target, "occupied").writeText("x")
+
+        storage.save(listOf(rule("new"))) // must not throw
+
+        assertTrue(target.isDirectory, "failed save must not delete the existing target")
+        val leftovers = target.parentFile!!.listFiles()!!.filter { it.name.endsWith(".tmp") }
+        assertTrue(leftovers.isEmpty(), "leftover tmp files: $leftovers")
+
+        // And with the obstruction removed, the original content is recoverable
+        // (the pre-fix fallback deleted the target before retrying the rename,
+        // which could lose both the old and the new rules at once).
+        target.deleteRecursively()
+        backup.copyTo(target)
+        assertEquals(listOf("original"), storage.load().map { it.id })
+    }
 }
