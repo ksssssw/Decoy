@@ -1,6 +1,6 @@
 # Decoy Design System
 
-The design language of the Decoy inspector web UI (`decoy-android/src/main/resources/web/index.html`).
+The design language of the Decoy inspector web UI (`decoy-android/src/main/resources/decoy-web/index.html`).
 Everything in this document applies to that single self-contained page; there is no other UI surface.
 
 ## Principles
