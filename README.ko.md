@@ -4,12 +4,9 @@
 [![CI](https://github.com/ksssssw/Decoy/actions/workflows/ci.yml/badge.svg)](https://github.com/ksssssw/Decoy/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 ![API](https://img.shields.io/badge/API-24%2B-brightgreen.svg)
-![Kotlin](https://img.shields.io/badge/Kotlin-2.4.0-blue.svg?logo=kotlin)
+![Kotlin](https://img.shields.io/badge/Kotlin-2.2.20-blue.svg?logo=kotlin)
 
 [English](README.md) | **한국어**
-
-<!-- TODO: 웹 인스펙터 UI 히어로 스크린샷/GIF 자리 -->
-<!-- 예: <p align="center"><img src="docs/images/inspector.gif" width="720" alt="Decoy inspector"></p> -->
 
 debug 빌드 전용 Android 네트워크 인스펙터·모커. HTTP 스택당 **두 줄**만 추가하면 앱의 모든 트래픽을 내장 웹 UI에서 인스펙션·모킹할 수 있습니다 — 개발·QA 중 에러 화면이나 엣지케이스 데이터 재현에 최적입니다. release 빌드에는 이 코드가 전혀 포함되지 않습니다.
 
@@ -19,7 +16,8 @@ debug 빌드 전용 Android 네트워크 인스펙터·모커. HTTP 스택당 **
 - **드래그 앤 드롭**으로 룰 순서/그룹 이동, 그룹 순서 변경, 그룹 이름 인라인 수정
 - **순서 기반 매칭** — 목록에서 위에 있는 룰이 먼저 적용 (중복 모킹 시 드래그로 우선순위 조정)
 - 룰셋 **Export/Import** — 전체/특정 그룹/선택한 룰만 JSON으로 추출, import 직후 **Undo** 지원
-- 다크/라이트 테마, 실행 중인 앱 패키지·버전 표시
+- 새로 디자인된 인스펙터 UI: 라이트/다크 디자인 시스템, 크기 조절 가능한 트래픽 사이드바, 최대화 가능한 룰 에디터, 실시간 연결 상태 표시
+- 실행 중인 앱의 이름·패키지·버전 표시 — 여러 앱을 띄워도 탭이 서로 구분됨
 - 모킹 룰은 파일로 영속화 — 앱을 재시작해도 순서·그룹까지 유지
 - Retrofit(OkHttp)·Ktor 3.x client 모두 지원, DI(Hilt/Koin/수동) 비종속
 - ContentProvider 자동 초기화 — `Application` 코드 수정 불필요
@@ -27,14 +25,25 @@ debug 빌드 전용 Android 네트워크 인스펙터·모커. HTTP 스택당 **
 
 ---
 
+## Requirements
+
+| | 최소 버전 |
+|---|---|
+| Android | minSdk 24 |
+| Kotlin | 2.2.20+ |
+| OkHttp (`decoy-okhttp`) | 4.12.0+ |
+| Ktor client (`decoy-ktor`) | 3.3.0+ |
+
+Decoy는 의도적으로 이 최소 버전들로 빌드됩니다 — 배포된 아티팩트가 앱의 Kotlin/OkHttp/Ktor 버전을 강제로 올리는 일이 없습니다.
+
 ## Quick Start
 
 ### Retrofit / OkHttp 앱
 
 ```kotlin
 // build.gradle.kts
-debugImplementation("io.github.ksssssw:decoy-okhttp:0.1.0")
-releaseImplementation("io.github.ksssssw:decoy-okhttp-noop:0.1.0")
+debugImplementation("io.github.ksssssw:decoy-okhttp:0.2.0")
+releaseImplementation("io.github.ksssssw:decoy-okhttp-noop:0.2.0")
 ```
 
 ```kotlin
@@ -47,8 +56,8 @@ val client = OkHttpClient.Builder()
 
 ```kotlin
 // build.gradle.kts
-debugImplementation("io.github.ksssssw:decoy-ktor:0.1.0")
-releaseImplementation("io.github.ksssssw:decoy-ktor-noop:0.1.0")
+debugImplementation("io.github.ksssssw:decoy-ktor:0.2.0")
+releaseImplementation("io.github.ksssssw:decoy-ktor-noop:0.2.0")
 ```
 
 ```kotlin
@@ -191,7 +200,7 @@ no-op 아티팩트는 실제 모듈과 동일한 패키지/시그니처를 제�
 - 그룹이 없는 룰 두 개를 겹쳐 놓으면 새 그룹 생성 (이름 바로 입력)
 - 그룹 헤더를 끌어 그룹 간 순서 변경, 연필 아이콘으로 그룹 이름 수정(같은 이름으로 바꾸면 병합)
 
-룰은 `files/decoy/rules.json`에 순서·그룹까지 저장되어 앱 재시작 후에도 유지됩니다. 캡처 트래픽은 인메모리(최근 500건)입니다.
+룰은 `files/decoy/rules.json`에 순서·그룹까지 저장되어 앱 재시작 후에도 유지됩니다. 캡처 트래픽은 인메모리 전용입니다(최근 500건, 총 32 MB 예산).
 
 모킹된 호출은 Traffic 목록에서 duration이 보라색으로 표시됩니다. duration은 (설정한 지연을 포함한) **실제 경과 시간**이고, 상세 화면에는 설정된 지연이 `Mock Delay`로 함께 표시됩니다.
 
@@ -224,21 +233,28 @@ Mock Rules 탭의 **Export**에서 전체 룰 또는 체크박스 트리로 고�
 ## 보안
 
 - 서버는 **127.0.0.1에만 바인딩** — 같은 Wi-Fi의 다른 기기에서는 접근할 수 없습니다. PC 접속은 `adb forward`(USB/adb 권한 필요)를 통해서만 가능합니다.
-- 자격 증명 헤더(`Authorization`, `Proxy-Authorization`, `Cookie`, `Set-Cookie`)는 캡처 시점에 `[redacted]`로 **마스킹**됩니다 — 토큰이 저장소·API·웹 UI 어디에도 평문으로 남지 않습니다.
-- `/ws` 실시간 피드는 **cross-origin WebSocket을 거부**합니다(`localhost`/`127.0.0.1` origin 또는 Origin 헤더가 없는 클라이언트만 허용) — 기기 브라우저에 열린 임의 페이지가 캡처 스트림을 읽을 수 없습니다.
+- **DNS 리바인딩 방어**: 모든 엔드포인트가 `Host` 헤더가 로컬(`localhost`/`127.0.0.1`)이 아닌 요청과 cross-origin 요청을 403으로 거부합니다 — DNS가 127.0.0.1로 재해석되는 웹 페이지도 캡처를 읽거나 룰을 주입할 수 없습니다. `/ws` 실시간 피드는 추가로 **cross-origin WebSocket을 거부**합니다.
+- 자격 증명 헤더는 캡처 시점에 `[redacted]`로 **마스킹**됩니다: `Authorization`, `Proxy-Authorization`, `Cookie`/`Set-Cookie`, 흔한 API 키/토큰 이름(`X-Api-Key`, `X-Auth-Token`, …), 그리고 `*-key`/`*-token`/`*-secret`/`*-auth`로 끝나는 모든 헤더(`HeaderRedactor` 참고). 단 **헤더만** 대상입니다 — URL이나 응답 바디에 포함된 토큰은 그대로 캡처됩니다.
+- Mock 룰은 서버에서 검증되고(정규식, 상태코드, 지연, 헤더 문자셋) 병리적 정규식은 데드라인 제한 후 격리되므로, 조작된 룰 파일이 앱을 크래시시키거나 멈추게 할 수 없습니다.
 - release 빌드는 no-op 아티팩트만 포함하므로 서버·인터셉트 코드가 APK에 존재하지 않습니다.
 - 남는 위협 모델: **같은 기기에 설치된 다른 앱**이 debug 빌드의 로컬 포트에 접근할 수 있습니다. 캡처 열람뿐 아니라 **REST API로 mock 룰을 주입·삭제해 debug 앱이 받는 응답을 조작**할 수도 있습니다. 민감한 트래픽을 다루는 앱이라면 debug 빌드 배포 범위에 유의하세요.
 - 절대 `implementation`으로 (모든 빌드타입에) 실제 아티팩트를 넣지 마세요 — release에 오픈 포트 서버가 포함됩니다.
 
 ### release에 Decoy가 없는지 검증하기
 
+CI가 매 빌드마다 이와 동일한 검사를 수행합니다(`.github/workflows/ci.yml`). 로컬에서 재현하려면:
+
 ```bash
 ./gradlew :app:assembleRelease
 
-# 1) dex에 서버 클래스가 없어야 함 (core 모델 + 스텁만 존재)
-$ANDROID_HOME/build-tools/<ver>/dexdump app-release.apk의 classes.dex | grep "com/decoy"
-#   → com/decoy/core/*, com/decoy/okhttp/DecoyInterceptor(스텁)만 출력
-#   → com/decoy/android/*, io/ktor/server/* 는 없어야 함
+# 1) dex에 서버 클래스가 없어야 함 (core 모델 + 스텁만 존재).
+#    release APK는 multidex일 수 있으므로 classes*.dex 전부를 스캔합니다.
+APK=$(ls app/build/outputs/apk/release/app-release*.apk | head -1)
+unzip -o -q "$APK" "classes*.dex" -d dexout
+DEXDUMP="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)/dexdump"
+for d in dexout/classes*.dex; do "$DEXDUMP" "$d" | grep "Class descriptor"; done \
+  | grep -E "Lcom/decoy/android/|Lio/ktor/server/"
+#   → 출력 없음이 정상 (com/decoy/core/*와 스텁 인터셉터는 존재해도 됨)
 
 # 2) 설치 후 리스닝 포트가 없어야 함 (8090 = 0x1F9A)
 adb shell "cat /proc/net/tcp | grep 1F9A"   # 출력 없음이 정상
@@ -267,4 +283,4 @@ adb shell "cat /proc/net/tcp | grep 1F9A"   # 출력 없음이 정상
 
 ## License
 
-MIT
+MIT — [LICENSE](LICENSE) 참고.

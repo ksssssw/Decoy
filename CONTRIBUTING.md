@@ -1,7 +1,8 @@
 # Contributing to Decoy
 
 Thanks for helping improve Decoy. This document covers the branching model and release
-process. For architecture and build details see [`CLAUDE.md`](CLAUDE.md).
+process. For architecture and build details see [`CLAUDE.md`](CLAUDE.md); the web UI's
+design language is documented in [`docs/DESIGN.md`](docs/DESIGN.md).
 
 ## Branching model
 
@@ -25,22 +26,19 @@ feature/* ─PR─▶ develop ─(accumulate, CI-gated)─▶ PR ─▶ main ─
 
 ## Releasing (maintainers)
 
-Releases are cut from `main` and published to Maven Central via
-`.github/workflows/publish.yml` (staged; finished manually in the Central Portal).
+The full procedure — credentials setup, snapshot publishing from `develop`, and the
+step-by-step release flow — lives in [`docs/RELEASING.md`](docs/RELEASING.md). Summary:
 
-1. Bump `VERSION_NAME` in `gradle.properties` to the target version (e.g. `0.2.0`) in a
-   release commit on `develop`.
-2. Merge `develop` → `main`.
-3. Tag **on main** with a matching `v` prefix and push it:
-   ```bash
-   git checkout main && git pull
-   git tag v0.2.0        # must equal VERSION_NAME
-   git push origin v0.2.0
-   ```
-4. The tag triggers `publish.yml`. It **fails fast if the tag doesn't match `VERSION_NAME`**
-   — this guard keeps the git tag and the published artifact version identical. Maven Central
-   forbids re-publishing a released version, so never reuse a tag.
-5. Finish the staged release in the [Central Portal](https://central.sonatype.com/).
+1. Release commit on `develop`: bump `VERSION_NAME` (drop `-SNAPSHOT`), move the
+   CHANGELOG `[Unreleased]` section to `## [X.Y.Z] - date`, bump the README install
+   snippets (both languages).
+2. Merge `develop` → `main`, then tag **on main** (`vX.Y.Z`, must equal `VERSION_NAME`)
+   and push the tag.
+3. `publish.yml` stages the artifacts to Maven Central (**fails fast on a
+   tag/`VERSION_NAME` mismatch**; never reuse a tag) and creates the GitHub Release from
+   the CHANGELOG section. Finish the staged release in the
+   [Central Portal](https://central.sonatype.com/).
+4. Bump `develop` to the next `-SNAPSHOT` version.
 
 ### Required repository secrets
 
