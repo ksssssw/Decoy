@@ -5,6 +5,10 @@ plugins {
 description = "Decoy Ktor — capturing/mocking plugin for the Ktor client (debug artifact)"
 android {
     namespace = "com.decoy.ktor"
+    testOptions {
+        // android.util.Log is called from JVM unit tests — return defaults instead of throwing
+        unitTests.isReturnDefaultValues = true
+    }
 }
 dependencies {
     // The adapter pulls in the inspector server + web UI transitively, so apps

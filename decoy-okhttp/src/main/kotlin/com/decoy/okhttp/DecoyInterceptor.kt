@@ -47,6 +47,8 @@ public class DecoyInterceptor : Interceptor {
 
         val mockRule = runCatching {
             MockRepository.findMatchingRule(request.url.toString(), request.method)
+        }.onFailure {
+            android.util.Log.w("Decoy", "Mock rule lookup failed for ${request.method} ${request.url}", it)
         }.getOrNull()
         if (mockRule != null) {
             if (mockRule.delayMs > 0) {
@@ -71,6 +73,12 @@ public class DecoyInterceptor : Interceptor {
                     // validation — skip a bad entry rather than fail the call.
                     .apply { mockRule.responseHeaders.forEach { (k, v) -> runCatching { header(k, v) } } }
                     .build()
+            }.onFailure {
+                android.util.Log.w(
+                    "Decoy",
+                    "Rule matched ${request.method} ${request.url} but building the mock response failed — falling back to the real network",
+                    it
+                )
             }.getOrNull()
             if (mockResponse != null) {
                 runCatching {

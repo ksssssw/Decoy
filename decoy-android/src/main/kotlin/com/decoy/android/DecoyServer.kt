@@ -392,8 +392,7 @@ private val TRUSTED_ORIGIN = Regex("^https?://(localhost|127\\.0\\.0\\.1)(:\\d+)
 private val TRUSTED_HOST = Regex("^(localhost|127\\.0\\.0\\.1|\\[::1])(:\\d+)?$", RegexOption.IGNORE_CASE)
 
 // Requests are matched against rule patterns synchronously on the app's network
-// threads, so an import of a hundred-KB pattern is rejected outright; the match
-// itself is additionally deadline-guarded in MockRepository.
+// threads, so an import of a hundred-KB pattern is rejected outright.
 private const val MAX_PATTERN_LENGTH = 1000
 private const val MAX_REQUEST_BODY_BYTES = 10L * 1024 * 1024
 

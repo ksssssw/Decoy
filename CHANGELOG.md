@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The inspector web UI is served from the namespaced classpath package `decoy-web/` so no other dependency's `web/` resources can collide into the served root.
 
 ### Fixed
+- Mock rules never matched on Android devices (only on the JVM): Android's `java.util.regex.Matcher` stringifies its `CharSequence` input, so the deadline-checking wrapper introduced in #27 was matched against its `toString()` output instead of the URL — only patterns like `.*` appeared to work. The deadline/quarantine mechanism is removed; matching runs directly on the URL string again.
+- A mock rule that matches but whose response can't be built no longer falls back to the real network silently — both interceptors now log a `Decoy` warning (same for a failing rule lookup), so "matched but not mocked" is diagnosable from Logcat.
 - Multi-instance inspector usability: browser tabs are now distinguishable (app label in the page title, header, and `/api/status`), the server rebinds its previous port after an app restart (`SO_REUSEADDR`) instead of drifting to 8091+, and Logcat startup lines name the owning app and package. (#12)
 - Decoy's own bookkeeping can no longer alter the host app's traffic: capture and mock-construction failures degrade to "not captured"/"not mocked" instead of turning a successful response into a client error, and a throwing capture listener no longer breaks recording.
 - `Decoy.start()` is idempotent — a second call returns the bound port instead of orphaning the running server (leaked socket, port drift off an issued `adb forward`); out-of-range ports fall back to 8090 instead of throwing into the host app.
@@ -27,7 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 - DNS-rebinding protection: every endpoint (REST, static UI, WebSocket) rejects requests whose `Host` is not local, and non-WebSocket requests with an untrusted `Origin`, with 403 — previously only `/ws` checked Origin.
-- Mock rules are validated server-side (regex compilability and ≤1000-char length, `statusCode` in 100–599, `delayMs` in 0–60000, RFC 7230 header charset → 400) and sanitized on load, so a crafted or corrupted rule can't crash host-app requests (null-header NPE) or hang them — pathological regexes are deadline-bounded (100 ms) and quarantined.
+- Mock rules are validated server-side (regex compilability and ≤1000-char length, `statusCode` in 100–599, `delayMs` in 0–60000, RFC 7230 header charset → 400) and sanitized on load, so a crafted or corrupted rule can't crash host-app requests (null-header NPE).
 - REST request bodies are capped at 10 MB (413); WebSocket sessions get ping/timeout, a 1 MB frame cap, and bounded backpressure; the capture ring buffer enforces a 32 MB total-size budget on top of the 500-entry cap.
 - API error responses return proper 400/413/415 for client errors and no longer echo internal exception messages.
 
