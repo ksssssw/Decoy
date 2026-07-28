@@ -30,16 +30,32 @@ jobs:
       # silently publish whatever stale version the repo still declares (and Maven Central
       # forbids re-publishing an already-released version). Bump VERSION_NAME to match the
       # tag in the release commit before tagging.
-      - name: Verify tag matches VERSION_NAME
-        if: startsWith(github.ref, 'refs/tags/v')
+      #
+      # Manual dispatch is the snapshot-deploy button: it may only publish -SNAPSHOT
+      # versions (routed to the Central Portal snapshots repository by the vanniktech
+      # plugin). A dispatch on a non-SNAPSHOT VERSION_NAME fails instead of silently
+      # re-publishing a release version.
+      - name: Verify version
         run: |
-          TAG_VERSION="${GITHUB_REF_NAME#v}"
           PROP_VERSION="$(grep -E '^VERSION_NAME=' gradle.properties | cut -d= -f2)"
-          if [ "$TAG_VERSION" != "$PROP_VERSION" ]; then
-            echo "::error::Tag v$TAG_VERSION does not match VERSION_NAME=$PROP_VERSION in gradle.properties. Bump VERSION_NAME to match the tag before releasing."
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            TAG_VERSION="${GITHUB_REF_NAME#v}"
+            if [ "$TAG_VERSION" != "$PROP_VERSION" ]; then
+              echo "::error::Tag v$TAG_VERSION does not match VERSION_NAME=$PROP_VERSION in gradle.properties. Bump VERSION_NAME to match the tag before releasing."
+              exit 1
+            fi
+            case "$PROP_VERSION" in
+              *-SNAPSHOT)
+                echo "::error::Release tags must not point at a -SNAPSHOT version."
+                exit 1;;
+            esac
+            echo "Releasing version $PROP_VERSION (tag v$TAG_VERSION)."
+          elif [[ "$PROP_VERSION" == *-SNAPSHOT ]]; then
+            echo "Publishing snapshot $PROP_VERSION from $GITHUB_REF_NAME."
+          else
+            echo "::error::Manual dispatch may only publish -SNAPSHOT versions; push a vX.Y.Z tag to release $PROP_VERSION."
             exit 1
           fi
-          echo "Releasing version $PROP_VERSION (tag v$TAG_VERSION)."
 
       - name: Publish to Maven Central (staged)
         run: ./gradlew publishToMavenCentral --no-configuration-cache
