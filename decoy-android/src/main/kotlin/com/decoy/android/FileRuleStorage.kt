@@ -4,6 +4,8 @@ import com.google.gson.Gson
 import com.decoy.core.MockRule
 import com.decoy.core.RuleStorage
 import java.io.File
+import java.io.FileOutputStream
+import java.io.IOException
 
 internal class FileRuleStorage(filesDir: File) : RuleStorage {
     private val gson = Gson()
@@ -21,16 +23,21 @@ internal class FileRuleStorage(filesDir: File) : RuleStorage {
     }
 
     override fun save(rules: List<MockRule>) {
+        val tmp = File(file.parentFile, "${file.name}.tmp")
         runCatching {
             file.parentFile?.mkdirs()
-            // Write-then-rename so a crash mid-write can't corrupt the rules file.
-            val tmp = File(file.parentFile, "${file.name}.tmp")
-            tmp.writeText(gson.toJson(StoredRules(version = 1, rules = rules)))
-            if (!tmp.renameTo(file)) {
-                file.delete()
-                tmp.renameTo(file)
+            // Write-then-fsync-then-rename: a crash mid-write can't corrupt the
+            // rules file, and the sync orders the data before the rename so a
+            // power loss right after it can't leave an empty rules.json behind.
+            FileOutputStream(tmp).use { out ->
+                out.write(gson.toJson(StoredRules(version = 1, rules = rules)).toByteArray())
+                out.fd.sync()
             }
+            // rename() atomically replaces the target on POSIX. Never delete the
+            // original as a fallback — if the rename fails the old rules survive.
+            if (!tmp.renameTo(file)) throw IOException("Could not replace ${file.name}")
         }.onFailure {
+            tmp.delete()
             android.util.Log.w("Decoy", "Failed to save mock rules", it)
         }
     }

@@ -14,6 +14,9 @@ public class DecoyInitializer : ContentProvider() {
         // A dev tool must never crash the host app — fail quietly and log instead.
         Thread({
             runCatching {
+                // The thread inherits the spawning (main) thread's priority — drop
+                // it so rule IO + the port scan never compete with app cold start.
+                android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND)
                 val appContext = context!!
                 MockRepository.attachStorage(FileRuleStorage(appContext.filesDir))
                 val decoy = RealDecoy(DecoyServer(loadAppInfo()))
