@@ -21,10 +21,6 @@ public object MockRepository {
     // pattern once. Grows with distinct patterns ever seen; trivially small.
     private val regexCache = ConcurrentHashMap<String, Regex>()
 
-    // Patterns that blew the match deadline once (catastrophic backtracking) are
-    // skipped for the rest of the process — they must never hang request threads.
-    private val timedOutPatterns = ConcurrentHashMap.newKeySet<String>()
-
     private val persistExecutor = Executors.newSingleThreadExecutor { runnable ->
         Thread(runnable, "decoy-rule-persist").apply { isDaemon = true }
     }
@@ -120,21 +116,12 @@ public object MockRepository {
         regexCache[pattern]
             ?: runCatching { Regex(pattern) }.getOrNull()?.also { regexCache[pattern] = it }
 
-    /**
-     * Runs the match against a deadline-checking [CharSequence]: catastrophic
-     * backtracking re-reads characters endlessly, so the deadline is hit inside
-     * the regex engine and the pattern is quarantined instead of hanging the
-     * app's network thread. Costs one bounded stall per bad pattern per process.
-     */
+    // The URL must be matched as a plain String: Android's java.util.regex.Matcher
+    // stringifies its CharSequence input via toString(), so any wrapper passed here
+    // would be matched against its toString() output instead of the URL.
     private fun matchesSafely(pattern: String, url: String): Boolean {
-        if (pattern in timedOutPatterns) return false
         val regex = compiledPattern(pattern) ?: return false
-        return try {
-            regex.containsMatchIn(DeadlineCharSequence(url, System.nanoTime() + MATCH_BUDGET_NANOS))
-        } catch (_: MatchDeadlineExceeded) {
-            timedOutPatterns.add(pattern)
-            false
-        }
+        return regex.containsMatchIn(url)
     }
 
     /**
@@ -178,26 +165,4 @@ public object MockRepository {
             runCatching { target.save(snapshot) }
         }
     }
-}
-
-private const val MATCH_BUDGET_NANOS = 100_000_000L // 100 ms
-
-private class MatchDeadlineExceeded : RuntimeException() {
-    // Thrown on the hot path purely for control flow — the stack is never used.
-    override fun fillInStackTrace(): Throwable = this
-}
-
-private class DeadlineCharSequence(
-    private val text: String,
-    private val deadline: Long,
-) : CharSequence {
-    override val length: Int get() = text.length
-
-    override fun get(index: Int): Char {
-        if (System.nanoTime() > deadline) throw MatchDeadlineExceeded()
-        return text[index]
-    }
-
-    override fun subSequence(startIndex: Int, endIndex: Int): CharSequence =
-        DeadlineCharSequence(text.substring(startIndex, endIndex), deadline)
 }

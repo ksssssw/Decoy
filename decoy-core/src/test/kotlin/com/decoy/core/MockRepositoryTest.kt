@@ -168,29 +168,11 @@ class MockRepositoryTest {
     }
 
     @Test
-    fun `catastrophic backtracking pattern is bounded and then quarantined`() {
-        MockRepository.addRule(rule("(a+)+$", id = "redos"))
-        val url = "https://api.test/" + "a".repeat(64) + "b"
-
-        val firstMs = kotlin.system.measureTimeMillis {
-            assertNull(MockRepository.findMatchingRule(url, "GET"))
-        }
-        // 100 ms match budget + scheduling slack; without the deadline this
-        // pattern would backtrack for years.
-        assertTrue(firstMs < 5_000, "match was not deadline-bounded: took ${firstMs}ms")
-
-        val secondMs = kotlin.system.measureTimeMillis {
-            assertNull(MockRepository.findMatchingRule(url, "GET"))
-        }
-        assertTrue(secondMs < 100, "quarantined pattern must be skipped instantly, took ${secondMs}ms")
-    }
-
-    @Test
-    fun `benign rules still match while a quarantined pattern is present`() {
-        MockRepository.addAll(listOf(rule("(a+)+$", id = "redos"), rule("/posts", id = "ok")))
-        val evil = "https://api.test/" + "a".repeat(64) + "b"
-        MockRepository.findMatchingRule(evil, "GET") // trips the quarantine
-        assertEquals("ok", MockRepository.findMatchingRule("https://api.test/posts", "GET")?.id)
+    fun `regex-escaped full url pattern matches its own url`() {
+        // Mirrors the web UI's "Create Mock from Request", which escapes the
+        // captured URL into a literal-matching pattern.
+        MockRepository.addRule(rule("""https://jsonplaceholder\.typicode\.com/posts"""))
+        assertNotNull(MockRepository.findMatchingRule("https://jsonplaceholder.typicode.com/posts", "GET"))
     }
 
     @Test

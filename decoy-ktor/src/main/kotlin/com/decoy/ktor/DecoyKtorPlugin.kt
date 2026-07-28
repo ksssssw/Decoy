@@ -75,7 +75,9 @@ public val DecoyKtorPlugin: ClientPlugin<Unit> = createClientPlugin("DecoyPlugin
         val id = requestBuilder.attributes.getOrNull(DecoyRequestId)
             ?: UUID.randomUUID().toString()
 
-        val mockRule = runCatching { MockRepository.findMatchingRule(url, method) }.getOrNull()
+        val mockRule = runCatching { MockRepository.findMatchingRule(url, method) }
+            .onFailure { android.util.Log.w("Decoy", "Mock rule lookup failed for $method $url", it) }
+            .getOrNull()
         if (mockRule != null) {
             // Intentionally app-visible: cancellation aborts the delay.
             if (mockRule.delayMs > 0) delay(mockRule.delayMs)
@@ -102,6 +104,12 @@ public val DecoyKtorPlugin: ClientPlugin<Unit> = createClientPlugin("DecoyPlugin
                     )
                 }
                 call
+            }.onFailure {
+                android.util.Log.w(
+                    "Decoy",
+                    "Rule matched $method $url but building the mock response failed — falling back to the real network",
+                    it
+                )
             }.getOrNull()
             if (mockCall != null) return@intercept mockCall
             // Mock couldn't be built — fall through to the real network.
