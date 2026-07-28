@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-07-29
+
 ### Added
 - Tag-triggered publishing workflow that stages all library artifacts to Maven Central when a `vX.Y.Z` tag is pushed, and creates the GitHub Release with this file's matching section as the release notes. (#1, #15)
 - Snapshot publishing: manually dispatching the Publish workflow uploads `-SNAPSHOT` versions to the Central Portal snapshots repository (release tags refuse `-SNAPSHOT`; manual dispatches refuse release versions).
@@ -47,5 +49,6 @@ Initial release, published to Maven Central under `io.github.ksssssw`.
 - Zero-setup auto-init via ContentProvider — no `Application` code required; initialization failures never crash the host app.
 - Published modules: `decoy-core`, `decoy-android`, `decoy-okhttp`, `decoy-okhttp-noop`, `decoy-ktor`, `decoy-ktor-noop`.
 
-[Unreleased]: https://github.com/ksssssw/Decoy/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/ksssssw/Decoy/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/ksssssw/Decoy/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/ksssssw/Decoy/releases/tag/v0.1.0
