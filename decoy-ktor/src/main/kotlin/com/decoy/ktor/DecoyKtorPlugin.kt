@@ -65,7 +65,9 @@ public val DecoyKtorPlugin: ClientPlugin<Unit> = createClientPlugin("DecoyPlugin
         }
 
         // ContentNegotiation has already turned the body into OutgoingContent here.
-        val requestBody = extractRequestBody(requestBuilder.body)
+        // Decoy's own bookkeeping must never break the app's request: any failure
+        // below degrades to "not captured" or "not mocked", never to a failed call.
+        val requestBody = runCatching { extractRequestBody(requestBuilder.body) }.getOrNull()
         val url = requestBuilder.url.buildString()
         val method = requestBuilder.method.value
         val startTime = requestBuilder.attributes.getOrNull(DecoyStartTime)
@@ -73,34 +75,43 @@ public val DecoyKtorPlugin: ClientPlugin<Unit> = createClientPlugin("DecoyPlugin
         val id = requestBuilder.attributes.getOrNull(DecoyRequestId)
             ?: UUID.randomUUID().toString()
 
-        val mockRule = MockRepository.findMatchingRule(url, method)
+        val mockRule = runCatching { MockRepository.findMatchingRule(url, method) }.getOrNull()
         if (mockRule != null) {
+            // Intentionally app-visible: cancellation aborts the delay.
             if (mockRule.delayMs > 0) delay(mockRule.delayMs)
 
-            val requestData = requestBuilder.build()
+            val mockCall = runCatching {
+                val requestData = requestBuilder.build()
+                val call = createMockCall(client, requestData, mockRule)
+                runCatching {
+                    NetworkStore.add(
+                        CapturedRequest(
+                            id = id,
+                            timestamp = startTime,
+                            method = method,
+                            url = url,
+                            requestHeaders = requestData.headers.entries().toRedactedHeaderMap(),
+                            requestBody = requestBody,
+                            responseCode = mockRule.statusCode,
+                            responseHeaders = mockRule.responseHeaders,
+                            responseBody = mockRule.responseBody,
+                            durationMs = System.currentTimeMillis() - startTime,
+                            isMocked = true,
+                            mockDelayMs = mockRule.delayMs
+                        )
+                    )
+                }
+                call
+            }.getOrNull()
+            if (mockCall != null) return@intercept mockCall
+            // Mock couldn't be built — fall through to the real network.
+        }
 
-            NetworkStore.add(
-                CapturedRequest(
-                    id = id,
-                    timestamp = startTime,
-                    method = method,
-                    url = url,
-                    requestHeaders = requestData.headers.entries().toRedactedHeaderMap(),
-                    requestBody = requestBody,
-                    responseCode = mockRule.statusCode,
-                    responseHeaders = mockRule.responseHeaders,
-                    responseBody = mockRule.responseBody,
-                    durationMs = System.currentTimeMillis() - startTime,
-                    isMocked = true,
-                    mockDelayMs = mockRule.delayMs
-                )
-            )
-
-            createMockCall(client, requestData, mockRule)
-        } else {
-            val call = try {
-                execute(requestBuilder)
-            } catch (t: Throwable) {
+        // Only execute() decides the app-visible outcome; capture work is isolated.
+        val call = try {
+            execute(requestBuilder)
+        } catch (t: Throwable) {
+            runCatching {
                 NetworkStore.add(
                     CapturedRequest(
                         id = id,
@@ -116,9 +127,18 @@ public val DecoyKtorPlugin: ClientPlugin<Unit> = createClientPlugin("DecoyPlugin
                         error = t.message ?: t::class.simpleName ?: "Error"
                     )
                 )
-                throw t
             }
+            throw t
+        }
+        try {
             captureRealCall(call, id, startTime, requestBody)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (_: Throwable) {
+            // captureRealCall handles its own post-save failures (see below), so a
+            // throw can only happen before the body was consumed — the original
+            // call is still intact for downstream plugins.
+            call
         }
     }
 }
@@ -137,22 +157,25 @@ private suspend fun captureRealCall(
     val response = call.response
     val contentType = response.contentType()
 
+    // Bookkeeping only — recording failure must never surface to the caller.
     fun record(bodyText: String?, truncated: Boolean = false) {
-        NetworkStore.add(
-            CapturedRequest(
-                id = id,
-                timestamp = startTime,
-                method = call.request.method.value,
-                url = call.request.url.toString(),
-                requestHeaders = call.request.headers.entries().toRedactedHeaderMap(),
-                requestBody = requestBody,
-                responseCode = response.status.value,
-                responseHeaders = response.headers.entries().toRedactedHeaderMap(),
-                responseBody = bodyText,
-                durationMs = System.currentTimeMillis() - startTime,
-                bodyTruncated = truncated
+        runCatching {
+            NetworkStore.add(
+                CapturedRequest(
+                    id = id,
+                    timestamp = startTime,
+                    method = call.request.method.value,
+                    url = call.request.url.toString(),
+                    requestHeaders = call.request.headers.entries().toRedactedHeaderMap(),
+                    requestBody = requestBody,
+                    responseCode = response.status.value,
+                    responseHeaders = response.headers.entries().toRedactedHeaderMap(),
+                    responseBody = bodyText,
+                    durationMs = System.currentTimeMillis() - startTime,
+                    bodyTruncated = truncated
+                )
             )
-        )
+        }
     }
 
     if (contentType?.match(ContentType.Text.EventStream) == true) {
@@ -185,16 +208,21 @@ private suspend fun captureRealCall(
         record("[unreadable body: ${e.message}]")
         return call
     }
-    val bytes: ByteArray = saved.response.body()
-    val truncated = bytes.size > BODY_LIMIT
-    val text = when {
-        bytes.isEmpty() -> null
-        // A cut at the byte limit can land mid-UTF-8-sequence — drop the
-        // resulting replacement char instead of showing a garbled tail.
-        truncated -> String(bytes.copyOf(BODY_LIMIT), Charsets.UTF_8).trimEnd('�')
-        else -> String(bytes, Charsets.UTF_8)
+    // From here on the original call's body has been consumed by save() — the
+    // caller must get [saved] back no matter what the capture bookkeeping does,
+    // or downstream plugins would read a drained body.
+    runCatching {
+        val bytes: ByteArray = saved.response.body()
+        val truncated = bytes.size > BODY_LIMIT
+        val text = when {
+            bytes.isEmpty() -> null
+            // A cut at the byte limit can land mid-UTF-8-sequence — drop the
+            // resulting replacement char instead of showing a garbled tail.
+            truncated -> String(bytes.copyOf(BODY_LIMIT), Charsets.UTF_8).trimEnd('�')
+            else -> String(bytes, Charsets.UTF_8)
+        }
+        record(text, truncated)
     }
-    record(text, truncated)
     return saved
 }
 

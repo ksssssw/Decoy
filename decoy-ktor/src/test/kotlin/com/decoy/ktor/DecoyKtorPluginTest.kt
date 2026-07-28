@@ -258,4 +258,39 @@ class DecoyKtorPluginTest {
 
         assertEquals(1, NetworkStore.getAll().size)
     }
+
+    @Test
+    fun `a throwing store listener never fails the app's request`() = runBlocking {
+        val listener: (com.decoy.core.CapturedRequest) -> Unit = { throw IllegalStateException("boom") }
+        NetworkStore.addListener(listener)
+        try {
+            val response = client().get("https://api.test/posts")
+            assertEquals(200, response.status.value)
+            assertEquals("""{"ok":1}""", response.bodyAsText())
+        } finally {
+            NetworkStore.removeListener(listener)
+        }
+    }
+
+    @Test
+    fun `mock rule with invalid header entries still serves the mock`() = runBlocking {
+        // Bypasses server-side validation, like a stale persisted rule would
+        MockRepository.addRule(mockRule("/posts").copy(
+            responseHeaders = mapOf("X-Ok" to "fine", "bad name" to "v")
+        ))
+        val response = client().get("https://api.test/posts")
+
+        assertEquals(418, response.status.value)
+        assertEquals("fine", response.headers["X-Ok"])
+        assertEquals(0, engineHits.get())
+    }
+
+    @Test
+    fun `JVM facade class matches the noop module for Java callers`() {
+        // Mirror of the noop-side guard: both modules must compile their top-level
+        // declarations into com.decoy.ktor.DecoyKtorPluginKt (file-name derived).
+        val facade = Class.forName("com.decoy.ktor.DecoyKtorPluginKt")
+        assertTrue(facade.methods.any { it.name == "installDecoy" })
+        assertTrue(facade.methods.any { it.name == "getDecoyKtorPlugin" })
+    }
 }
