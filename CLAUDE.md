@@ -61,8 +61,8 @@ Auto-init → capture → serve, with no host-app code:
 
 1. **`DecoyInitializer`** (ContentProvider in `decoy-android`) starts everything at app launch, wrapped in `runCatching` — a debug tool must never crash the host app. It wires `FileRuleStorage` into `MockRepository`, starts `DecoyServer`, and sets `DecoyProvider.instance`.
 2. **Interceptors** (`DecoyInterceptor` for OkHttp, `DecoyKtorPlugin` for Ktor) consult `MockRepository.findMatchingRule(url, method)` — first *enabled* rule in list order wins (order-based matching; UI drag-and-drop reorders). Match → synthetic response after `delayMs`; no match → proceed and record into `NetworkStore` (in-memory ring buffer, latest 500).
-3. **`DecoyServer`** — Ktor CIO bound to **127.0.0.1 only** (loopback is the security model; never bind wider), preferred port 8090 with fallback +10. Serves the web UI from classpath `resources/web/`, REST under `/api/*`, and pushes new captures over `/ws` via a `NetworkStore` listener. Route logic is extracted into `Application.decoyModule(...)` so tests drive it with Ktor `testApplication` without a socket.
-4. **Web UI** is a single hand-edited file: `decoy-android/src/main/resources/web/index.html` (~1700 lines, inline CSS/JS, no frontend build). Fully offline/self-contained — do not add CDN references.
+3. **`DecoyServer`** — Ktor CIO bound to **127.0.0.1 only** (loopback is the security model; never bind wider), preferred port 8090 with fallback +10. Serves the web UI from classpath `resources/decoy-web/`, REST under `/api/*`, and pushes new captures over `/ws` via a `NetworkStore` listener. Route logic is extracted into `Application.decoyModule(...)` so tests drive it with Ktor `testApplication` without a socket.
+4. **Web UI** is a single hand-edited file: `decoy-android/src/main/resources/decoy-web/index.html` (~1700 lines, inline CSS/JS, no frontend build). Fully offline/self-contained — do not add CDN references.
 
 ## Docs
 

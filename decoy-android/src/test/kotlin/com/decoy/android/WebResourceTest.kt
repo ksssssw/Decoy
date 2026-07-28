@@ -11,7 +11,7 @@ import kotlin.test.assertTrue
 /**
  * Smoke test that the inspector web UI is packaged into the classpath
  * resources and served from `/`. Catches packaging regressions (e.g. the
- * file moving out of `resources/web/`) that no route test would notice.
+ * file moving out of `resources/decoy-web/`) that no route test would notice.
  */
 class WebResourceTest {
 
