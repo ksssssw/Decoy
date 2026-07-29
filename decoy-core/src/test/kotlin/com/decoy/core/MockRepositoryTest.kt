@@ -166,4 +166,31 @@ class MockRepositoryTest {
         assertTrue(storage.saveLatch.await(2, TimeUnit.SECONDS), "persist was never called")
         assertEquals(listOf("r1"), storage.saved.last().map { it.id })
     }
+
+    @Test
+    fun `regex-escaped full url pattern matches its own url`() {
+        // Mirrors the web UI's "Create Mock from Request", which escapes the
+        // captured URL into a literal-matching pattern.
+        MockRepository.addRule(rule("""https://jsonplaceholder\.typicode\.com/posts"""))
+        assertNotNull(MockRepository.findMatchingRule("https://jsonplaceholder.typicode.com/posts", "GET"))
+    }
+
+    @Test
+    fun `readers never observe an empty list during replaceAll`() {
+        val pair = listOf(rule("/a", id = "a"), rule("/b", id = "b"))
+        MockRepository.replaceAll(pair)
+
+        var sawEmpty = false
+        val reader = Thread {
+            repeat(20_000) {
+                if (MockRepository.getRules().isEmpty()) sawEmpty = true
+            }
+        }
+        val writer = Thread { repeat(2_000) { MockRepository.replaceAll(pair) } }
+        reader.start(); writer.start()
+        reader.join(10_000); writer.join(10_000)
+
+        assertFalse(sawEmpty, "getRules() observed the clear+addAll window")
+        assertEquals(2, MockRepository.getRules().size)
+    }
 }

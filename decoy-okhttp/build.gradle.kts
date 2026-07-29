@@ -5,6 +5,10 @@ plugins {
 description = "Decoy OkHttp — capturing/mocking interceptor for OkHttp/Retrofit (debug artifact)"
 android {
     namespace = "com.decoy.okhttp"
+    testOptions {
+        // android.util.Log is called from JVM unit tests — return defaults instead of throwing
+        unitTests.isReturnDefaultValues = true
+    }
 }
 dependencies {
     // The adapter pulls in the inspector server + web UI transitively, so apps

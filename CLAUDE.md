@@ -45,14 +45,28 @@ Convention plugins live in `build-logic/convention/src/main/kotlin/` (composite 
 
 SDK levels are catalog versions in `gradle/libs.versions.toml` (`projectCompileSdk`/`projectMinSdk`/`projectTargetSdk`). The root `build.gradle.kts` `apply false` block must stay — it puts AGP/KGP/compose on the root classpath so the convention plugins' `compileOnly` deps resolve. All library modules compile with **explicit API mode**: every public declaration needs an explicit visibility modifier and return type.
 
+## Branching & release
+
+- **`main` = release-only** (production). It always equals the last published release — never commit or open feature/dependency PRs directly against it.
+- **`develop` = integration.** All feature and dependency work targets `develop`; Dependabot is configured with `target-branch: develop`. CI (`.github/workflows/ci.yml`) runs on PRs to any branch and on pushes to `main`/`develop`.
+- **Release flow:** merge `develop` → `main`, then push a `vX.Y.Z` tag **on main**. The tag triggers `.github/workflows/publish.yml`, which stages all library artifacts to Maven Central (finished manually in the Central Portal) and then creates the GitHub Release, using that version's `CHANGELOG.md` section as the release notes.
+- **CHANGELOG.md is part of every release commit:** alongside the `VERSION_NAME` bump, move the `[Unreleased]` entries into a new `## [X.Y.Z] - YYYY-MM-DD` section (Keep a Changelog format) and update the compare links — the publish workflow reads that section for the GitHub Release notes.
+- **Version is tag-driven, but kept honest:** `VERSION_NAME` in `gradle.properties` is the artifact version. The publish workflow **fails** if the tag (`vX.Y.Z`) doesn't match `VERSION_NAME` — so the release commit must bump `VERSION_NAME` to match the tag before tagging. Maven Central forbids re-publishing an already-released version, so never reuse a tag.
+- **Raising `projectCompileSdk`/AGP is consumer-facing** — it's shared app↔libraries via the catalog and propagates to consumers through AAR metadata. Keep the SDK on a widely-supported baseline; don't chase bleeding-edge API levels (e.g. a Dependabot bump that demands compileSdk 37 + AGP 9 is a red flag, not a routine merge).
+- **Kotlin/OkHttp/Ktor versions are consumer-facing too — build against the *minimum* supported versions.** Bumping Kotlin stamps a newer metadata version into every published class, and a Kotlin compiler only reads metadata one minor version ahead of itself (a 2.4-built artifact fails to compile in a Kotlin ≤2.2 app). OkHttp is an `api()` dep of both the real adapter *and* the noop twin, so a bump transitively force-upgrades consumers' **release** builds; Ktor leaks the same way onto debug classpaths, and `MockCallFactory.kt` uses `@InternalAPI`, which has no compatibility guarantee. Dependabot ignores all of these (`.github/dependabot.yml`) — bump them only manually and deliberately, and verify against a consumer app on the oldest supported versions.
+
 ## Runtime architecture
 
 Auto-init → capture → serve, with no host-app code:
 
 1. **`DecoyInitializer`** (ContentProvider in `decoy-android`) starts everything at app launch, wrapped in `runCatching` — a debug tool must never crash the host app. It wires `FileRuleStorage` into `MockRepository`, starts `DecoyServer`, and sets `DecoyProvider.instance`.
 2. **Interceptors** (`DecoyInterceptor` for OkHttp, `DecoyKtorPlugin` for Ktor) consult `MockRepository.findMatchingRule(url, method)` — first *enabled* rule in list order wins (order-based matching; UI drag-and-drop reorders). Match → synthetic response after `delayMs`; no match → proceed and record into `NetworkStore` (in-memory ring buffer, latest 500).
-3. **`DecoyServer`** — Ktor CIO bound to **127.0.0.1 only** (loopback is the security model; never bind wider), preferred port 8090 with fallback +10. Serves the web UI from classpath `resources/web/`, REST under `/api/*`, and pushes new captures over `/ws` via a `NetworkStore` listener. Route logic is extracted into `Application.decoyModule(...)` so tests drive it with Ktor `testApplication` without a socket.
-4. **Web UI** is a single hand-edited file: `decoy-android/src/main/resources/web/index.html` (~1700 lines, inline CSS/JS, no frontend build). Fully offline/self-contained — do not add CDN references.
+3. **`DecoyServer`** — Ktor CIO bound to **127.0.0.1 only** (loopback is the security model; never bind wider), preferred port 8090 with fallback +10. Serves the web UI from classpath `resources/decoy-web/`, REST under `/api/*`, and pushes new captures over `/ws` via a `NetworkStore` listener. Route logic is extracted into `Application.decoyModule(...)` so tests drive it with Ktor `testApplication` without a socket.
+4. **Web UI** is a single hand-edited file: `decoy-android/src/main/resources/decoy-web/index.html` (~1700 lines, inline CSS/JS, no frontend build). Fully offline/self-contained — do not add CDN references.
+
+## Docs
+
+- **`README.md` and `README.ko.md` are translations of each other** — any content change to one must be mirrored in the other in the same change set (structure and sections stay 1:1; only the language differs).
 
 ## Gotchas
 
@@ -60,6 +74,7 @@ Auto-init → capture → serve, with no host-app code:
 - **Ktor `@OptIn(InternalAPI)` is quarantined in `MockCallFactory.kt`** — the only file allowed to touch it, so a Ktor 3.x migration changes just that file. Don't spread InternalAPI usage.
 - **Plugin order matters for Ktor consumers**: `installDecoy()` must be installed *before* ContentNegotiation (bodies are captured as `OutgoingContent`).
 - **`decoy-android` unit tests rely on `unitTests.isReturnDefaultValues = true`** (set in that module only) because server/storage code calls `android.util.Log` directly. Don't move this into the convention plugin — it would silently change test semantics of other modules.
+- **Never pass a custom `CharSequence` into regex matching** — Android's `java.util.regex.Matcher` (ICU-backed) immediately converts its input via `input.toString()`, so a wrapper without a `toString()` override is matched against its object-address string, not the text. JVM (OpenJDK) reads `charAt()` directly, so unit tests pass while every device silently misbehaves — this exact bug shipped in a 0.2.0 snapshot (deadline-checking wrapper in `MockRepository`, since removed).
 - `NetworkStore` and `MockRepository` are process-wide singletons — tests must clear them in setup/teardown (see `DecoyServerRoutesTest`).
 - Body capture caps at 1MB and must not consume the original stream (`peekBody` on OkHttp, `call.save()` on Ktor); event-stream/compressed/binary bodies are skipped with marker strings.
 - Rule persistence (`filesDir/decoy/rules.json`) is crash-safe: write `.tmp` then rename. Keep that pattern when touching `FileRuleStorage`.

@@ -8,9 +8,6 @@
 
 **English** | [한국어](README.ko.md)
 
-<!-- TODO: hero screenshot/GIF of the web inspector UI goes here -->
-<!-- e.g. <p align="center"><img src="docs/images/inspector.gif" width="720" alt="Decoy inspector"></p> -->
-
 A debug-only network inspector & mocker for Android. Add **two lines per HTTP stack** and inspect/mock all your app's traffic in a built-in web UI — perfect for reproducing error screens and edge-case data during development and QA. Release builds contain none of it.
 
 - Automatically captures every HTTP request/response in your app
@@ -19,7 +16,8 @@ A debug-only network inspector & mocker for Android. Add **two lines per HTTP st
 - **Drag & drop** to reorder rules, move them between groups, reorder groups, and rename groups inline
 - **Order-based matching** — the topmost rule in the list wins (drag to adjust precedence when rules overlap)
 - Rule set **Export/Import** — share JSON files with teammates and designers; export everything, a single group, or hand-picked rules; **Undo** right after an import
-- Dark/light theme, shows the running app's package & version
+- Redesigned inspector UI: light/dark design system, resizable traffic sidebar, maximizable rule editor, live connection status
+- Shows the running app's name, package & version — tabs stay distinguishable with multiple apps
 - Mock rules persist to a file — order and groups survive app restarts
 - Supports both Retrofit (OkHttp) and Ktor 3.x client; DI-agnostic (Hilt/Koin/manual)
 - ContentProvider auto-init — no `Application` code changes needed
@@ -27,14 +25,25 @@ A debug-only network inspector & mocker for Android. Add **two lines per HTTP st
 
 ---
 
+## Requirements
+
+| | Minimum |
+|---|---|
+| Android | minSdk 24 |
+| Kotlin | 2.2.20+ |
+| OkHttp (`decoy-okhttp`) | 4.12.0+ |
+| Ktor client (`decoy-ktor`) | 3.3.0+ |
+
+Decoy is built against these floor versions on purpose — the published artifacts never force-upgrade your app's Kotlin/OkHttp/Ktor.
+
 ## Quick Start
 
 ### Retrofit / OkHttp apps
 
 ```kotlin
 // build.gradle.kts
-debugImplementation("io.github.ksssssw:decoy-okhttp:0.1.0")
-releaseImplementation("io.github.ksssssw:decoy-okhttp-noop:0.1.0")
+debugImplementation("io.github.ksssssw:decoy-okhttp:0.2.0")
+releaseImplementation("io.github.ksssssw:decoy-okhttp-noop:0.2.0")
 ```
 
 ```kotlin
@@ -47,8 +56,8 @@ val client = OkHttpClient.Builder()
 
 ```kotlin
 // build.gradle.kts
-debugImplementation("io.github.ksssssw:decoy-ktor:0.1.0")
-releaseImplementation("io.github.ksssssw:decoy-ktor-noop:0.1.0")
+debugImplementation("io.github.ksssssw:decoy-ktor:0.2.0")
+releaseImplementation("io.github.ksssssw:decoy-ktor-noop:0.2.0")
 ```
 
 ```kotlin
@@ -71,12 +80,45 @@ The server binds to the device's **loopback (127.0.0.1) only**. To connect:
 | PC browser (recommended) | `adb forward tcp:8090 tcp:8090` → `http://localhost:8090` |
 | On-device browser | `http://localhost:8090` (or launch an intent via `DecoyLauncher.getInspectorUrl()`) |
 
-If port 8090 is taken, it automatically falls back to 8091–8099; the actual port is printed to Logcat (tag `Decoy`).
+If port 8090 is taken, it automatically falls back to 8091–8099; the actual port is printed to Logcat (tag `Decoy`). The server binds with `SO_REUSEADDR`, so an app restart re-acquires its previous port even while old connections linger in TIME_WAIT — an already-issued `adb forward` keeps working across restarts.
 
 ```kotlin
 // Get the inspector URL from inside the app — returns null in release
 val url: String? = DecoyLauncher.getInspectorUrl()
 ```
+
+### Multiple apps or devices
+
+Each Decoy-enabled app on a device gets its own port: the first to launch binds 8090, the next 8091, and so on (launch order decides). To see which app owns which port:
+
+```bash
+adb logcat -s Decoy
+# Decoy: Inspector for My App (com.example.myapp) running at http://localhost:8090 (loopback only)
+# Decoy: Inspector for Other App (com.example.other) running at http://localhost:8091 (loopback only)
+```
+
+Forward each port you need (`adb forward --list` shows current mappings). With several devices/emulators, target each by serial — the host port doesn't have to match the device port:
+
+```bash
+adb devices                                        # list serials
+adb -s emulator-5554 forward tcp:8090 tcp:8090
+adb -s R3CX90ABCDE forward tcp:8091 tcp:8090       # host :8091 → device :8090
+```
+
+Every browser tab titles itself with the app's name and the host-side port (e.g. `My App · Decoy :8091`), so tabs stay distinguishable.
+
+### Troubleshooting: inspector unreachable (e.g. the next morning)
+
+`adb forward` mappings go stale when the device sleeps, reconnects, or the host-side adb daemon wedges — the SDK on the device can't fix that end. Recover in this order:
+
+```bash
+adb forward --list                       # is the mapping still there?
+adb forward --remove-all                 # drop stale mappings…
+adb forward tcp:8090 tcp:8090            # …and re-issue
+adb kill-server && adb start-server      # last resort: restart the adb daemon (then re-forward)
+```
+
+The app side needs nothing: restarting the app no longer changes its port (see `SO_REUSEADDR` above), so a re-issued forward to the same port just works.
 
 ---
 
@@ -158,7 +200,7 @@ Create rules in the web UI's **Mock Rules** tab, or from a captured request via 
 - Drop two ungrouped rules onto each other to create a new group (name it right away)
 - Drag group headers to reorder groups; rename with the pencil icon (renaming onto an existing name merges)
 
-Rules are saved — including order and groups — to `files/decoy/rules.json` and survive app restarts. Captured traffic is in-memory (latest 500 entries).
+Rules are saved — including order and groups — to `files/decoy/rules.json` and survive app restarts. Captured traffic is in-memory only (latest 500 entries, 32 MB total budget).
 
 Mocked calls show a purple duration in the Traffic list. The duration is the **actual elapsed time** (including the configured delay); the detail view additionally shows the configured delay as `Mock Delay`.
 
@@ -191,21 +233,28 @@ The API used by the web UI can also be called directly (e.g. injecting rules fro
 ## Security
 
 - The server binds to **127.0.0.1 only** — other devices on the same Wi-Fi cannot reach it. PC access works only through `adb forward` (requires USB/adb authorization).
-- Credential headers (`Authorization`, `Proxy-Authorization`, `Cookie`, `Set-Cookie`) are **masked as `[redacted]` at capture time** — tokens never reach the store, the API, or the web UI in clear text.
-- The `/ws` live feed **rejects cross-origin WebSocket connections** (only `localhost`/`127.0.0.1` origins, or clients without an Origin header, are accepted) — a page open in the device browser cannot read the capture stream.
+- **DNS-rebinding protection**: every endpoint rejects requests whose `Host` header is not local (`localhost`/`127.0.0.1`) and cross-origin requests with 403 — a web page whose DNS re-resolves to 127.0.0.1 still can't read captures or inject rules. The `/ws` live feed additionally **rejects cross-origin WebSocket connections**.
+- Credential-bearing headers are **masked as `[redacted]` at capture time**: `Authorization`, `Proxy-Authorization`, `Cookie`/`Set-Cookie`, common API-key/token names (`X-Api-Key`, `X-Auth-Token`, …), and any `*-key`/`*-token`/`*-secret`/`*-auth` header (see `HeaderRedactor`). Note this covers **headers only** — tokens embedded in URLs or response bodies are captured as-is.
+- Mock rules are validated server-side (regex, status code, delay, header charset), so a crafted rule file can't crash the app.
 - Release builds include only the no-op artifacts, so no server/intercept code exists in the APK.
 - Residual threat model: **another app installed on the same device** could reach the debug build's local port. Beyond reading captures, that includes **injecting or wiping mock rules via the REST API** — i.e. altering the responses your debug app sees. If your app handles sensitive traffic, be mindful of who receives debug builds.
 - Never add the real artifact with `implementation` (all build types) — your release would ship an open-port server.
 
 ### Verifying release builds contain no Decoy
 
+CI runs this exact check on every build (`.github/workflows/ci.yml`); to reproduce it locally:
+
 ```bash
 ./gradlew :app:assembleRelease
 
-# 1) The dex must contain no server classes (only core models + stubs)
-$ANDROID_HOME/build-tools/<ver>/dexdump classes.dex from app-release.apk | grep "com/decoy"
-#   → only com/decoy/core/* and com/decoy/okhttp/DecoyInterceptor (stub) should appear
-#   → com/decoy/android/* and io/ktor/server/* must be absent
+# 1) The dex must contain no server classes (only core models + stubs).
+#    Release APKs can be multidex — scan every classes*.dex.
+APK=$(ls app/build/outputs/apk/release/app-release*.apk | head -1)
+unzip -o -q "$APK" "classes*.dex" -d dexout
+DEXDUMP="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)/dexdump"
+for d in dexout/classes*.dex; do "$DEXDUMP" "$d" | grep "Class descriptor"; done \
+  | grep -E "Lcom/decoy/android/|Lio/ktor/server/"
+#   → no output is correct (com/decoy/core/* and the stub interceptors may exist)
 
 # 2) No listening port after install (8090 = 0x1F9A)
 adb shell "cat /proc/net/tcp | grep 1F9A"   # no output is correct
@@ -228,6 +277,10 @@ The `:app` module demonstrates both the Retrofit (OkHttp) and Ktor client paths 
 - Server-side request replay (re-issuing requests through the app's real client configuration)
 - Decouple the embedded inspector server from the consumer's Ktor version (shade/relocate or a dependency-light server) so a single artifact serves apps on any Ktor version — or none
 
+## Contributing
+
+Branching model and release process are documented in [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE).

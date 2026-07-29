@@ -40,11 +40,19 @@ public class DecoyInterceptor : Interceptor {
         val request = chain.request()
         val id = UUID.randomUUID().toString()
         val startTime = System.currentTimeMillis()
-        val requestBody = extractRequestBody(request)
+        // Decoy's own bookkeeping must never break the app's request: any
+        // failure below degrades to "not captured" or "not mocked", never to a
+        // failed or altered call the app would otherwise have seen succeed.
+        val requestBody = runCatching { extractRequestBody(request) }.getOrNull()
 
-        val mockRule = MockRepository.findMatchingRule(request.url.toString(), request.method)
+        val mockRule = runCatching {
+            MockRepository.findMatchingRule(request.url.toString(), request.method)
+        }.onFailure {
+            android.util.Log.w("Decoy", "Mock rule lookup failed for ${request.method} ${request.url}", it)
+        }.getOrNull()
         if (mockRule != null) {
             if (mockRule.delayMs > 0) {
+                // Intentionally app-visible: a canceled call must abort the delay.
                 try {
                     Thread.sleep(mockRule.delayMs)
                 } catch (e: InterruptedException) {
@@ -54,37 +62,73 @@ public class DecoyInterceptor : Interceptor {
                 if (chain.call().isCanceled()) throw IOException("Canceled")
             }
 
-            val mockResponse = Response.Builder()
-                .request(request)
-                .protocol(Protocol.HTTP_1_1)
-                .code(mockRule.statusCode)
-                .message("Mocked (Decoy)")
-                .body(mockRule.responseBody.toResponseBody("application/json".toMediaType()))
-                .apply { mockRule.responseHeaders.forEach { (k, v) -> header(k, v) } }
-                .build()
-
-            NetworkStore.add(CapturedRequest(
-                id = id,
-                timestamp = startTime,
-                method = request.method,
-                url = request.url.toString(),
-                requestHeaders = request.headers.toMap(),
-                requestBody = requestBody,
-                responseCode = mockRule.statusCode,
-                responseHeaders = mockRule.responseHeaders,
-                responseBody = mockRule.responseBody,
-                durationMs = System.currentTimeMillis() - startTime,
-                isMocked = true,
-                mockDelayMs = mockRule.delayMs
-            ))
-            return mockResponse
+            val mockResponse = runCatching {
+                Response.Builder()
+                    .request(request)
+                    .protocol(Protocol.HTTP_1_1)
+                    .code(mockRule.statusCode)
+                    .message("Mocked (Decoy)")
+                    .body(mockRule.responseBody.toResponseBody("application/json".toMediaType()))
+                    // Stale persisted rules may predate server-side header
+                    // validation — skip a bad entry rather than fail the call.
+                    .apply { mockRule.responseHeaders.forEach { (k, v) -> runCatching { header(k, v) } } }
+                    .build()
+            }.onFailure {
+                android.util.Log.w(
+                    "Decoy",
+                    "Rule matched ${request.method} ${request.url} but building the mock response failed — falling back to the real network",
+                    it
+                )
+            }.getOrNull()
+            if (mockResponse != null) {
+                runCatching {
+                    NetworkStore.add(CapturedRequest(
+                        id = id,
+                        timestamp = startTime,
+                        method = request.method,
+                        url = request.url.toString(),
+                        requestHeaders = request.headers.toMap(),
+                        requestBody = requestBody,
+                        responseCode = mockRule.statusCode,
+                        responseHeaders = mockRule.responseHeaders,
+                        responseBody = mockRule.responseBody,
+                        durationMs = System.currentTimeMillis() - startTime,
+                        isMocked = true,
+                        mockDelayMs = mockRule.delayMs
+                    ))
+                }
+                return mockResponse
+            }
+            // Mock couldn't be built — fall through to the real network.
         }
 
-        return try {
-            val response = chain.proceed(request)
+        // Only chain.proceed decides the app-visible outcome. Capture work runs
+        // after it, isolated: a peekBody failure or store error on a successful
+        // response must not convert that success into a client failure.
+        val response = try {
+            chain.proceed(request)
+        } catch (e: Exception) {
+            runCatching {
+                NetworkStore.add(CapturedRequest(
+                    id = id,
+                    timestamp = startTime,
+                    method = request.method,
+                    url = request.url.toString(),
+                    requestHeaders = request.headers.toMap(),
+                    requestBody = requestBody,
+                    responseCode = null,
+                    responseHeaders = emptyMap(),
+                    responseBody = null,
+                    durationMs = System.currentTimeMillis() - startTime,
+                    error = e.message ?: e.javaClass.simpleName
+                ))
+            }
+            throw e
+        }
+
+        runCatching {
             val duration = System.currentTimeMillis() - startTime
             val (bodyText, truncated) = captureResponseBody(response)
-
             NetworkStore.add(CapturedRequest(
                 id = id,
                 timestamp = startTime,
@@ -98,24 +142,8 @@ public class DecoyInterceptor : Interceptor {
                 durationMs = duration,
                 bodyTruncated = truncated
             ))
-
-            response
-        } catch (e: Exception) {
-            NetworkStore.add(CapturedRequest(
-                id = id,
-                timestamp = startTime,
-                method = request.method,
-                url = request.url.toString(),
-                requestHeaders = request.headers.toMap(),
-                requestBody = requestBody,
-                responseCode = null,
-                responseHeaders = emptyMap(),
-                responseBody = null,
-                durationMs = System.currentTimeMillis() - startTime,
-                error = e.message ?: e.javaClass.simpleName
-            ))
-            throw e
         }
+        return response
     }
 
     /**

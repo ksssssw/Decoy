@@ -53,6 +53,7 @@ class DecoyServerRoutesTest {
         application {
             decoyModule(
                 AppInfo(
+                    appName = "Test App",
                     packageName = "com.test.app",
                     appVersion = "1.0",
                     versionCode = 1L,
@@ -289,9 +290,166 @@ class DecoyServerRoutesTest {
     }
 
     @Test
+    fun `api rejects a rebound Host header with 403`() = apiTest {
+        val response = client.get("/api/calls") { header(HttpHeaders.Host, "attacker.example:8090") }
+        assertEquals(HttpStatusCode.Forbidden, response.status)
+    }
+
+    @Test
+    fun `static UI rejects a rebound Host header with 403`() = apiTest {
+        val response = client.get("/") { header(HttpHeaders.Host, "attacker.example") }
+        assertEquals(HttpStatusCode.Forbidden, response.status)
+    }
+
+    @Test
+    fun `api rejects cross-origin requests with 403`() = apiTest {
+        val get = client.get("/api/calls") { header(HttpHeaders.Origin, "http://evil.example") }
+        assertEquals(HttpStatusCode.Forbidden, get.status)
+
+        val post = client.post("/api/mocks") {
+            header(HttpHeaders.Origin, "http://evil.example")
+            contentType(ContentType.Application.Json)
+            setBody(ruleJson("/posts"))
+        }
+        assertEquals(HttpStatusCode.Forbidden, post.status)
+        assertTrue(MockRepository.getRules().isEmpty())
+    }
+
+    @Test
+    fun `api allows localhost Host and Origin`() = apiTest {
+        val response = client.get("/api/calls") {
+            header(HttpHeaders.Host, "127.0.0.1:8095")
+            header(HttpHeaders.Origin, "http://localhost:8090")
+        }
+        assertEquals(HttpStatusCode.OK, response.status)
+    }
+
+    @Test
+    fun `null responseHeaders map is accepted as empty`() = apiTest {
+        val response = client.post("/api/mocks") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"urlPattern":"/posts","responseHeaders":null}""")
+        }
+        assertEquals(HttpStatusCode.Created, response.status)
+        assertEquals(emptyMap(), MockRepository.getRules().single().responseHeaders)
+    }
+
+    @Test
+    fun `null header value returns 400`() = apiTest {
+        // Gson happily produces Map<String, String> entries with null values
+        val response = client.post("/api/mocks") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"urlPattern":"/posts","responseHeaders":{"X-Test":null}}""")
+        }
+        assertEquals(HttpStatusCode.BadRequest, response.status)
+        assertTrue(MockRepository.getRules().isEmpty())
+    }
+
+    @Test
+    fun `mock with an invalid header value returns 400`() = apiTest {
+        val response = client.post("/api/mocks") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"urlPattern":"/posts","responseHeaders":{"X-Test":"줄바꿈"}}""")
+        }
+        assertEquals(HttpStatusCode.BadRequest, response.status)
+        assertTrue(MockRepository.getRules().isEmpty())
+    }
+
+    @Test
+    fun `mock with an invalid header name returns 400`() = apiTest {
+        val response = client.post("/api/mocks") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"urlPattern":"/posts","responseHeaders":{"X Test":"v"}}""")
+        }
+        assertEquals(HttpStatusCode.BadRequest, response.status)
+    }
+
+    @Test
+    fun `mock with an out-of-range statusCode returns 400`() = apiTest {
+        val response = client.post("/api/mocks") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"urlPattern":"/posts","statusCode":999}""")
+        }
+        assertEquals(HttpStatusCode.BadRequest, response.status)
+    }
+
+    @Test
+    fun `mock with a negative delay returns 400`() = apiTest {
+        val response = client.put("/api/mocks/r1") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"urlPattern":"/posts","delayMs":-1}""")
+        }
+        assertEquals(HttpStatusCode.BadRequest, response.status)
+    }
+
+    @Test
+    fun `import skips rules with out-of-range values`() = apiTest {
+        val response = client.post("/api/mocks/import") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"mode":"merge","rules":[${ruleJson("/ok")},{"urlPattern":"/bad","statusCode":42}]}""")
+        }
+        val result = gson.fromJson(response.bodyAsText(), Map::class.java)
+        assertEquals(1.0, result["imported"])
+        assertEquals(1.0, result["skipped"])
+    }
+
+    @Test
+    fun `malformed JSON returns 400 without internal details`() = apiTest {
+        val response = client.post("/api/mocks") {
+            contentType(ContentType.Application.Json)
+            setBody("not json at all")
+        }
+        assertEquals(HttpStatusCode.BadRequest, response.status)
+        val body = response.bodyAsText()
+        assertTrue(!body.contains("Exception") && !body.contains("io.ktor"), "must not leak internals: $body")
+    }
+
+    @Test
+    fun `wrong content type returns 415`() = apiTest {
+        val response = client.post("/api/mocks") {
+            contentType(ContentType.Text.Plain)
+            setBody("hello")
+        }
+        assertEquals(HttpStatusCode.UnsupportedMediaType, response.status)
+    }
+
+    @Test
+    fun `oversized request body returns 413`() = apiTest {
+        val big = "x".repeat(11 * 1024 * 1024)
+        val response = client.post("/api/mocks") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"urlPattern":"/posts","responseBody":"$big"}""")
+        }
+        assertEquals(HttpStatusCode.PayloadTooLarge, response.status)
+    }
+
+    @Test
+    fun `oversized url pattern returns 400`() = apiTest {
+        val response = client.post("/api/mocks") {
+            contentType(ContentType.Application.Json)
+            setBody(ruleJson("a".repeat(1001)))
+        }
+        assertEquals(HttpStatusCode.BadRequest, response.status)
+    }
+
+    @Test
+    fun `websocket session survives a capture burst`() = apiTest {
+        val wsClient = createClient { install(WebSockets) }
+        wsClient.webSocket("/ws", request = { header(HttpHeaders.Origin, "http://localhost:8090") }) {
+            awaitCaptureFrame("warmup") // listener registered
+            repeat(500) { NetworkStore.add(capturedCall("burst-$it")) }
+            // DROP_OLDEST makes exact delivery nondeterministic — assert liveness:
+            // the session still pushes new captures after the burst.
+            val frame = awaitCaptureFrame("after-burst")
+            assertTrue(frame.readText().contains("api.test"))
+        }
+    }
+
+    @Test
     fun `status endpoint reports app info and counts`() = apiTest {
         NetworkStore.add(capturedCall("c1"))
         val status = gson.fromJson(client.get("/api/status").bodyAsText(), Map::class.java)
+        assertEquals("Test App", status["appName"])
         assertEquals("com.test.app", status["packageName"])
         assertEquals(8090.0, status["port"])
         assertEquals(1.0, status["callCount"])

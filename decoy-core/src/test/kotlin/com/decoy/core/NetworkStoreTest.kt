@@ -84,4 +84,46 @@ class NetworkStoreTest {
         NetworkStore.add(call("c1"))
         assertTrue(received.isEmpty())
     }
+
+    @Test
+    fun `a throwing listener does not fail the capture or starve later listeners`() {
+        val received = mutableListOf<String>()
+        listen { throw IllegalStateException("boom") }
+        listen { received.add(it.id) }
+
+        NetworkStore.add(call("c1")) // must not throw
+
+        assertEquals(listOf("c1"), received)
+        assertEquals(1, NetworkStore.getAll().size)
+    }
+
+    @Test
+    fun `total byte budget evicts oldest entries long before the count cap`() {
+        val megabyte = "x".repeat(1024 * 1024)
+        repeat(40) { NetworkStore.add(call("big$it").copy(responseBody = megabyte)) }
+
+        val all = NetworkStore.getAll()
+        // ~2 MB heap per entry against a 32 MB budget → far fewer than 40 retained
+        assertTrue(all.size < 40, "expected byte-budget eviction, kept ${all.size}")
+        assertEquals("big39", all.first().id, "newest entry must survive")
+        assertNull(NetworkStore.getById("big0"))
+    }
+
+    @Test
+    fun `an entry bigger than the whole budget is still kept as the sole entry`() {
+        val huge = "x".repeat(33 * 1024 * 1024)
+        NetworkStore.add(call("huge").copy(responseBody = huge))
+        assertEquals(listOf("huge"), NetworkStore.getAll().map { it.id })
+    }
+
+    @Test
+    fun `clear resets the byte budget`() {
+        val megabyte = "x".repeat(1024 * 1024)
+        repeat(20) { NetworkStore.add(call("big$it").copy(responseBody = megabyte)) }
+        NetworkStore.clear()
+
+        // If the budget survived clear(), these small entries would be evicted
+        repeat(100) { NetworkStore.add(call("small$it")) }
+        assertEquals(100, NetworkStore.getAll().size)
+    }
 }
